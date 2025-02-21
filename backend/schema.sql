@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS products (
+    id SERIAL PRIMARY KEY,
+    amazon_url TEXT,
+    asin TEXT,
+    price NUMERIC(10,2),
+    moq INTEGER,
+    qty INTEGER,
+    upc TEXT,
+    cost NUMERIC(10,2),
+    vendor TEXT,
+    lead_time TEXT,
+    exp_date TEXT,
+    fob TEXT,
+    profit_moq NUMERIC(10,2),
+    image_url TEXT,
+    title TEXT NOT NULL,
+    category TEXT,
+    out_of_stock BOOLEAN DEFAULT FALSE,
+    walmart_url TEXT,
+    ebay_url TEXT
+);
