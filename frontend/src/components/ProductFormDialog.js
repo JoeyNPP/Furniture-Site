@@ -4,350 +4,385 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Button,
   TextField,
+  Button,
   FormControl,
+  InputLabel,
   Select,
   MenuItem,
-  Stack,
-  Typography
 } from "@mui/material";
-import Autocomplete from "@mui/material/Autocomplete";
 
-// Default options for the dropdown fields
-const defaultCategories = [
-  "Appliances",
-  "Automotive",
-  "Baby",
-  "Beauty & Personal Care",
-  "Cell Phones & Accessories",
-  "Clothing, Shoes & Jewelry",
-  "Electronics",
-  "Health & Household",
-  "Home & Kitchen",
-  "Industrial & Industrial",
-  "Kitchen & Dining",
-  "Musical Instruments",
-  "Patio, Lawn & Garden",
-  "Pet Supplies",
-  "Sports & Outdoors",
-  "Tools & Home Improvement",
-  "Toys & Games",
-  "Office Products",
-  "Grocery & Gourmet Food",
-  "Video Games",
-  "Arts, Crafts & Sewing",
-  "Camera & Photo"
-];
-
-const defaultVendors = [
-  "BSD",
-  "Bulk",
-  "123",
-  "DA",
-  "Fred",
-  "UPD",
-  "Haut",
-  "NY Cos",
-  "DTG",
-  "MS",
-  "GPS",
-  "Cos",
-  "Cust",
-  "BB",
-  "JW",
-  "JAMN",
-  "FlecHub",
-  "Royal"
-];
-
-const defaultLeadTimes = [
-  "7-10 Days",
-  "10-14 Days",
-  "14-21 Days",
-  "Business Days"
-];
-
-const defaultFOBs = [
-  "FOB NJ",
-  "FOB LA",
-  "FOB SH",
-  "FOB China"
-];
-
-const ProductFormDialog = ({
-  open,
-  mode = "add",
-  initialData = {},
-  onClose,
-  onSubmit
-}) => {
-  // Local state for product fields (including our new timestamp fields)
-  const [formState, setFormState] = useState({
+const ProductFormDialog = ({ open, mode, initialData, onClose, onSubmit, timezone }) => {
+  const [formData, setFormData] = useState({
     title: "",
     category: "",
+    vendor_id: "",
     vendor: "",
     price: "",
+    cost: "",
     moq: "",
     qty: "",
     upc: "",
-    cost: "",
+    asin: "",
     lead_time: "",
     exp_date: "",
     fob: "",
-    vendor_id: "",
-    profit_moq: "",
     image_url: "",
     out_of_stock: false,
+    amazon_url: "",
     walmart_url: "",
     ebay_url: "",
-    amazon_url: "",
-    asin: "",
-    // Timestamp fields
     offer_date: "",
-    last_sent: ""
+    last_sent: "",
+    sales_per_month: "",
+    net: "",
   });
 
   useEffect(() => {
-    if (mode === "edit" && initialData) {
-      setFormState({
+    if (initialData) {
+      setFormData({
         title: initialData.title || "",
         category: initialData.category || "",
+        vendor_id: initialData.vendor_id || "",
         vendor: initialData.vendor || "",
         price: initialData.price || "",
+        cost: initialData.cost || "",
         moq: initialData.moq || "",
         qty: initialData.qty || "",
         upc: initialData.upc || "",
-        cost: initialData.cost || "",
-        lead_time: initialData.lead_time ? String(initialData.lead_time) : "",
+        asin: initialData.asin || "",
+        lead_time: initialData.lead_time || "",
         exp_date: initialData.exp_date || "",
         fob: initialData.fob || "",
-        vendor_id: initialData.vendor_id || "",
-        profit_moq: initialData.profit_moq || "",
         image_url: initialData.image_url || "",
-        out_of_stock: !!initialData.out_of_stock,
+        out_of_stock: initialData.out_of_stock || false,
+        amazon_url: initialData.amazon_url || "",
         walmart_url: initialData.walmart_url || "",
         ebay_url: initialData.ebay_url || "",
-        amazon_url: initialData.amazon_url || "",
-        asin: initialData.asin || "",
-        offer_date: initialData.offer_date || "",
-        last_sent: initialData.last_sent || ""
+        offer_date: initialData.offer_date ? new Date(initialData.offer_date).toISOString().split('T')[0] : "",
+        last_sent: initialData.last_sent ? new Date(initialData.last_sent).toISOString().split('T')[0] : "",
+        sales_per_month: initialData.sales_per_month || "",
+        net: initialData.net || "",
       });
     } else {
-      setFormState({
+      setFormData({
         title: "",
         category: "",
+        vendor_id: "",
         vendor: "",
         price: "",
+        cost: "",
         moq: "",
         qty: "",
         upc: "",
-        cost: "",
+        asin: "",
         lead_time: "",
         exp_date: "",
         fob: "",
-        vendor_id: "",
-        profit_moq: "",
         image_url: "",
         out_of_stock: false,
+        amazon_url: "",
         walmart_url: "",
         ebay_url: "",
-        amazon_url: "",
-        asin: "",
         offer_date: "",
-        last_sent: ""
+        last_sent: "",
+        sales_per_month: "",
+        net: "",
       });
     }
-  }, [mode, initialData]);
+  }, [initialData, open]);
 
-  // Handle form field changes
-  const handleChange = (field, value) => {
-    setFormState((prev) => ({ ...prev, [field]: value }));
-  };
+  useEffect(() => {
+    if (!open) {
+      localStorage.removeItem("productFormData"); // Clear saved form data when dialog closes
+    }
+  }, [open]);
 
-  // Handle saving the form data
-  const handleSave = () => {
-    // Convert numeric and date/time fields before submitting
-    const productData = {
-      ...formState,
-      price: formState.price ? parseFloat(formState.price) : null,
-      cost: formState.cost ? parseFloat(formState.cost) : null,
-      moq: formState.moq ? parseInt(formState.moq, 10) : 0,
-      qty: formState.qty ? parseInt(formState.qty, 10) : 0,
-      profit_moq: formState.profit_moq ? parseFloat(formState.profit_moq) : null,
-      // Convert date strings to ISO or null if needed (you can add parsing logic here)
-      offer_date: formState.offer_date,
-      last_sent: formState.last_sent
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    let newValue = type === "checkbox" ? checked : value;
+    // Handle numeric fields
+    if (["price", "cost", "net"].includes(name)) {
+      newValue = value === "" ? "" : parseFloat(value);
+    }
+    // Handle integer fields
+    if (["moq", "qty", "sales_per_month"].includes(name)) {
+      newValue = value === "" ? "" : parseInt(value, 10);
+    }
+    const newFormData = {
+      ...formData,
+      [name]: newValue,
     };
-    onSubmit(productData);
+    setFormData(newFormData);
+    console.log(`Form field updated: ${name} = ${newValue}`);
   };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    console.log("Form submitted with data:", formData);
+    // Convert empty strings to null for numeric fields before submitting
+    const submitData = {
+      ...formData,
+      price: formData.price === "" ? null : formData.price,
+      cost: formData.cost === "" ? null : formData.cost,
+      moq: formData.moq === "" ? null : formData.moq,
+      qty: formData.qty === "" ? null : formData.qty,
+      sales_per_month: formData.sales_per_month === "" ? null : formData.sales_per_month,
+      net: formData.net === "" ? null : formData.net,
+    };
+    onSubmit(submitData);
+  };
+
+  const allCategories = [
+    "Appliances",
+    "Automotive",
+    "Baby",
+    "Beauty & Personal Care",
+    "Cell Phones & Accessories",
+    "Clothing, Shoes & Jewelry",
+    "Electronics",
+    "Health & Household",
+    "Home & Kitchen",
+    "Industrial & Industrial",
+    "Kitchen & Dining",
+    "Musical Instruments",
+    "Patio, Lawn & Garden",
+    "Pet Supplies",
+    "Sports & Outdoors",
+    "Tools & Home Improvement",
+    "Toys & Games",
+    "Office Products",
+    "Grocery & Gourmet Food",
+    "Video Games",
+    "Arts, Crafts & Sewing",
+    "Camera & Photo",
+  ];
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>
-        {mode === "edit" ? "Edit Product" : "Add Product"}
-      </DialogTitle>
-      <DialogContent dividers>
-        <Stack spacing={2}>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>{mode === "add" ? "Add Product" : "Edit Product"}</DialogTitle>
+      <DialogContent>
+        <form onSubmit={handleSubmit} style={{ marginTop: 16 }}>
           <TextField
+            fullWidth
+            margin="dense"
             label="Title"
-            value={formState.title}
-            onChange={(e) => handleChange("title", e.target.value)}
+            name="title"
+            value={formData.title}
+            onChange={handleChange}
             required
           />
-          <Stack direction="row" spacing={2}>
-            {/* Category dropdown with freeSolo */}
-            <Autocomplete
-              freeSolo
-              options={defaultCategories}
-              value={formState.category}
-              onChange={(e, newValue) => handleChange("category", newValue)}
-              renderInput={(params) => (
-                <TextField {...params} label="Category" />
-              )}
-              fullWidth
-            />
-            {/* Vendor dropdown with freeSolo */}
-            <Autocomplete
-              freeSolo
-              options={defaultVendors}
-              value={formState.vendor}
-              onChange={(e, newValue) => handleChange("vendor", newValue)}
-              renderInput={(params) => (
-                <TextField {...params} label="Vendor" />
-              )}
-              fullWidth
-            />
-          </Stack>
-          <Stack direction="row" spacing={2}>
-            {/* Lead Time dropdown with freeSolo */}
-            <Autocomplete
-              freeSolo
-              options={defaultLeadTimes}
-              value={formState.lead_time}
-              onChange={(e, newValue) => handleChange("lead_time", newValue)}
-              renderInput={(params) => (
-                <TextField {...params} label="Lead Time" />
-              )}
-              fullWidth
-            />
-            {/* FOB dropdown with freeSolo */}
-            <Autocomplete
-              freeSolo
-              options={defaultFOBs}
-              value={formState.fob}
-              onChange={(e, newValue) => handleChange("fob", newValue)}
-              renderInput={(params) => (
-                <TextField {...params} label="FOB" />
-              )}
-              fullWidth
-            />
-          </Stack>
-          {/* The rest of the fields remain as TextField components */}
-          <Stack direction="row" spacing={2}>
-            <TextField
-              label="Price"
-              type="number"
-              value={formState.price}
-              onChange={(e) => handleChange("price", e.target.value)}
-            />
-            <TextField
-              label="Cost"
-              type="number"
-              value={formState.cost}
-              onChange={(e) => handleChange("cost", e.target.value)}
-            />
-          </Stack>
-          <Stack direction="row" spacing={2}>
-            <TextField
-              label="MOQ"
-              type="number"
-              value={formState.moq}
-              onChange={(e) => handleChange("moq", e.target.value)}
-            />
-            <TextField
-              label="Qty"
-              type="number"
-              value={formState.qty}
-              onChange={(e) => handleChange("qty", e.target.value)}
-            />
-          </Stack>
-          <Stack direction="row" spacing={2}>
-            <TextField
-              label="UPC"
-              value={formState.upc}
-              onChange={(e) => handleChange("upc", e.target.value)}
-            />
-            <TextField
-              label="ASIN"
-              value={formState.asin}
-              onChange={(e) => handleChange("asin", e.target.value)}
-            />
-          </Stack>
-          <Stack direction="row" spacing={2}>
-            <TextField
-              label="Exp Date"
-              value={formState.exp_date}
-              onChange={(e) => handleChange("exp_date", e.target.value)}
-            />
-          </Stack>
-          <Stack direction="row" spacing={2}>
-            <TextField
-              label="Image URL"
-              value={formState.image_url}
-              onChange={(e) => handleChange("image_url", e.target.value)}
-            />
-          </Stack>
-          <FormControl fullWidth>
-            <TextField
-              label="Amazon URL"
-              value={formState.amazon_url}
-              onChange={(e) => handleChange("amazon_url", e.target.value)}
-            />
+          <FormControl fullWidth margin="dense">
+            <InputLabel>Category</InputLabel>
+            <Select
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+              label="Category"
+            >
+              <MenuItem value="">Select Category</MenuItem>
+              {allCategories.map((cat) => (
+                <MenuItem key={cat} value={cat}>
+                  {cat}
+                </MenuItem>
+              ))}
+            </Select>
           </FormControl>
-          <Stack direction="row" spacing={2}>
-            <TextField
-              label="Walmart URL"
-              value={formState.walmart_url}
-              onChange={(e) => handleChange("walmart_url", e.target.value)}
-            />
-            <TextField
-              label="eBay URL"
-              value={formState.ebay_url}
-              onChange={(e) => handleChange("ebay_url", e.target.value)}
-            />
-          </Stack>
-          {/* Timestamps (optional) */}
-          <Stack direction="row" spacing={2}>
-            <TextField
-              label="Offer Date (YYYY-MM-DD HH:MM)"
-              value={formState.offer_date}
-              onChange={(e) => handleChange("offer_date", e.target.value)}
-              helperText="When this product was first offered."
-            />
-            <TextField
-              label="Last Sent (YYYY-MM-DD HH:MM)"
-              value={formState.last_sent}
-              onChange={(e) => handleChange("last_sent", e.target.value)}
-              helperText="Most recent time an email was sent."
-            />
-          </Stack>
-          {/* Out of stock dropdown */}
-          <FormControl fullWidth>
-            <TextField
-              label="Out of Stock? (yes/no)"
-              value={formState.out_of_stock ? "yes" : "no"}
-              onChange={(e) =>
-                handleChange("out_of_stock", e.target.value === "yes")
-              }
-            />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Vendor ID"
+            name="vendor_id"
+            value={formData.vendor_id}
+            onChange={handleChange}
+            placeholder="Enter Vendor ID (e.g., V123, 12345)"
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Vendor"
+            name="vendor"
+            value={formData.vendor}
+            onChange={handleChange}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Price"
+            name="price"
+            value={formData.price}
+            onChange={handleChange}
+            type="number"
+            InputProps={{ inputProps: { min: 0, step: "0.01" } }}
+            onWheel={(e) => e.target.blur()}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Cost"
+            name="cost"
+            value={formData.cost}
+            onChange={handleChange}
+            type="number"
+            InputProps={{ inputProps: { min: 0, step: "0.01" } }}
+            onWheel={(e) => e.target.blur()}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="MOQ"
+            name="moq"
+            value={formData.moq}
+            onChange={handleChange}
+            type="number"
+            InputProps={{ inputProps: { min: 0 } }}
+            onWheel={(e) => e.target.blur()}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Qty"
+            name="qty"
+            value={formData.qty}
+            onChange={handleChange}
+            type="number"
+            InputProps={{ inputProps: { min: 0 } }}
+            onWheel={(e) => e.target.blur()}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="UPC"
+            name="upc"
+            value={formData.upc}
+            onChange={handleChange}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="ASIN"
+            name="asin"
+            value={formData.asin}
+            onChange={handleChange}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Lead Time"
+            name="lead_time"
+            value={formData.lead_time}
+            onChange={handleChange}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Exp Date"
+            name="exp_date"
+            value={formData.exp_date}
+            onChange={handleChange}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="FOB"
+            name="fob"
+            value={formData.fob}
+            onChange={handleChange}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Image URL"
+            name="image_url"
+            value={formData.image_url}
+            onChange={handleChange}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Amazon URL"
+            name="amazon_url"
+            value={formData.amazon_url}
+            onChange={handleChange}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Walmart URL"
+            name="walmart_url"
+            value={formData.walmart_url}
+            onChange={handleChange}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="eBay URL"
+            name="ebay_url"
+            value={formData.ebay_url}
+            onChange={handleChange}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Offer Date"
+            name="offer_date"
+            type="date"
+            value={formData.offer_date}
+            onChange={handleChange}
+            InputLabelProps={{ shrink: true }}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Last Sent"
+            name="last_sent"
+            type="date"
+            value={formData.last_sent}
+            onChange={handleChange}
+            InputLabelProps={{ shrink: true }}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Sales Per Month"
+            name="sales_per_month"
+            value={formData.sales_per_month}
+            onChange={handleChange}
+            type="number"
+            InputProps={{ inputProps: { min: 0 } }}
+            onWheel={(e) => e.target.blur()}
+          />
+          <TextField
+            fullWidth
+            margin="dense"
+            label="Net"
+            name="net"
+            value={formData.net}
+            onChange={handleChange}
+            type="number"
+            InputProps={{ inputProps: { min: 0, step: "0.01" } }}
+            onWheel={(e) => e.target.blur()}
+          />
+          <FormControl fullWidth margin="dense">
+            <InputLabel>Out of Stock</InputLabel>
+            <Select
+              name="out_of_stock"
+              value={formData.out_of_stock}
+              onChange={handleChange}
+              label="Out of Stock"
+            >
+              <MenuItem value={false}>No</MenuItem>
+              <MenuItem value={true}>Yes</MenuItem>
+            </Select>
           </FormControl>
-        </Stack>
+        </form>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={handleSave}>
-          {mode === "edit" ? "Save Changes" : "Add Product"}
+        <Button onClick={onClose} color="secondary">
+          Cancel
+        </Button>
+        <Button type="submit" onClick={handleSubmit} color="primary">
+          {mode === "add" ? "Add" : "Update"}
         </Button>
       </DialogActions>
     </Dialog>
