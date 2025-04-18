@@ -1,124 +1,139 @@
-// Path: frontend/src/api.js
+const API_URL = 'http://104.131.49.141:8000';
 
-// 1) Fetch all products
-export async function fetchProducts() {
-  try {
-    const response = await fetch("http://127.0.0.1:8000/products/");
-    if (!response.ok) {
-      throw new Error(`HTTP Error ${response.status}`);
-    }
-    // Django might return { products: [...] } or just an array
-    return await response.json();
-  } catch (error) {
-    console.error("Error fetching products:", error);
-    throw error;
+async function login(username, password) {
+  const response = await fetch(`${API_URL}/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      'username': username,
+      'password': password,
+    }),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP Error ${response.status}: ${errorText}`);
   }
+  return response.json();
 }
 
-// 2) Create a new product
-export async function createProduct(data) {
-  try {
-    const response = await fetch("http://127.0.0.1:8000/products/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP Error ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("Error creating product:", error);
-    throw error;
+async function fetchProducts() {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('No token found');
   }
+  const response = await fetch(`${API_URL}/products`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+  }
+  return response.json();
 }
 
-// 3) Update an existing product
-// If your Django route is /products/<id>/, note the trailing slash:
-export async function updateProduct(id, data) {
-  try {
-    const response = await fetch(`http://127.0.0.1:8000/products/${id}/`, {
-      method: "PATCH", // Use PATCH to match the backend update endpoint
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP Error ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("Error updating product:", error);
-    throw error;
+async function createProduct(data) {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('No token found');
   }
+  console.log('Sending POST with data:', data);
+  const response = await fetch(`${API_URL}/products`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+  }
+  return response.json();
 }
 
-// Delete a product
-export async function deleteProduct(id) {
-  try {
-    const response = await fetch(`http://127.0.0.1:8000/products/${id}/`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP Error ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("Error deleting product:", error);
-    throw error;
+async function updateProduct(id, data) {
+  console.log(`Preparing PATCH for ID: ${id} with data:`, data);
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('No token found');
   }
+  const response = await fetch(`${API_URL}/products/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  console.log('PATCH Response status:', response.status);
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.log('PATCH Response error:', response.status, errorText);
+    throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+  }
+  return response.json();
 }
 
-// Mark product as out-of-stock
-export async function markOutOfStock(id) {
-  try {
-    const response = await fetch(`http://127.0.0.1:8000/products/${id}/mark-out-of-stock/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP Error ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("Error marking product out-of-stock:", error);
-    throw error;
+async function deleteProduct(id) {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('No token found');
   }
+  const response = await fetch(`${API_URL}/products/${id}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+  }
+  return response.json();
 }
 
-// 4) Send single-product email & update last_sent in one step
-// (If you created a "send_product_email" endpoint in Django)
-export async function sendProductEmail(id) {
-  try {
-    const response = await fetch(`http://127.0.0.1:8000/products/${id}/send-email/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP Error ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("Error sending product email:", error);
-    throw error;
+async function markOutOfStock(id) {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('No token found');
   }
+  const response = await fetch(`${API_URL}/products/${id}/mark-out-of-stock`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+  }
+  return response.json();
 }
 
-// 5) Send group email for multiple products
-// (If you created a "send_group_email" endpoint in Django)
-export async function sendGroupEmail(productIds) {
-  try {
-    const response = await fetch("http://127.0.0.1:8000/products/send-group-email/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ product_ids: productIds }),
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP Error ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error("Error sending group email:", error);
-    throw error;
+async function searchProducts(query) {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('No token found');
   }
+  const response = await fetch(`${API_URL}/products/search?query=${encodeURIComponent(query)}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+  }
+  return response.json();
 }
+
+export { login, fetchProducts, createProduct, updateProduct, deleteProduct, markOutOfStock, searchProducts };

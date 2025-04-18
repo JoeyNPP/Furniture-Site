@@ -1,14 +1,16 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import Optional, List
 import psycopg2
 from psycopg2.extras import RealDictCursor
-import requests
-import json
-from datetime import datetime
+from datetime import datetime, timedelta
+import jwt
+import bcrypt
 
+app = FastAPI()
 
+# Database connection
 def get_db_connection():
     return psycopg2.connect(
         dbname="npp_deals",
@@ -18,321 +20,283 @@ def get_db_connection():
         cursor_factory=RealDictCursor
     )
 
+# JWT settings
+SECRET_KEY = "your-secret-key"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-app = FastAPI()
+# OAuth2 scheme
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# CORS: Adjust in production as needed
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# Product model for creation with Optional types for non-required fields
+# Pydantic models
 class Product(BaseModel):
-    amazon_url: Optional[str] = None
-    asin: Optional[str] = None
-    price: Optional[float] = None
-    moq: Optional[int] = None
-    qty: Optional[int] = None
-    upc: Optional[str] = None
-    cost: Optional[float] = None
-    vendor: Optional[str] = None
-    lead_time: Optional[str] = None
-    exp_date: Optional[str] = None
-    fob: Optional[str] = None
-    profit_moq: Optional[float] = None
-    image_url: Optional[str] = None
-    title: str
-    category: Optional[str] = None
-    out_of_stock: bool = False
-    walmart_url: Optional[str] = None
-    ebay_url: Optional[str] = None
-    offer_date: Optional[str] = None
-    last_sent: Optional[str] = None
-
-    class Config:
-        extra = "ignore"
-
-
-# Model for partial updates (all fields optional)
-class ProductUpdate(BaseModel):
-    amazon_url: Optional[str] = None
-    asin: Optional[str] = None
-    price: Optional[float] = None
-    moq: Optional[int] = None
-    qty: Optional[int] = None
-    upc: Optional[str] = None
-    cost: Optional[float] = None
-    vendor: Optional[str] = None
-    lead_time: Optional[str] = None
-    exp_date: Optional[str] = None
-    fob: Optional[str] = None
-    profit_moq: Optional[float] = None
-    image_url: Optional[str] = None
     title: Optional[str] = None
     category: Optional[str] = None
-    out_of_stock: Optional[bool] = None
+    vendor_id: Optional[str] = None
+    vendor: Optional[str] = None
+    price: Optional[float] = None
+    cost: Optional[float] = None
+    moq: Optional[int] = None
+    qty: Optional[int] = None
+    upc: Optional[str] = None
+    asin: Optional[str] = None
+    lead_time: Optional[str] = None
+    exp_date: Optional[str] = None
+    fob: Optional[str] = None
+    image_url: Optional[str] = None
+    out_of_stock: Optional[bool] = False
+    amazon_url: Optional[str] = None
     walmart_url: Optional[str] = None
     ebay_url: Optional[str] = None
-    offer_date: Optional[str] = None
-    last_sent: Optional[str] = None
+    offer_date: Optional[datetime] = None
+    last_sent: Optional[datetime] = None
+    sales_per_month: Optional[int] = None
+    net: Optional[float] = None
 
-    class Config:
-        extra = "ignore"
+class ProductUpdate(BaseModel):
+    title: Optional[str] = None
+    category: Optional[str] = None
+    vendor_id: Optional[str] = None
+    vendor: Optional[str] = None
+    price: Optional[float] = None
+    cost: Optional[float] = None
+    moq: Optional[int] = None
+    qty: Optional[int] = None
+    upc: Optional[str] = None
+    asin: Optional[str] = None
+    lead_time: Optional[str] = None
+    exp_date: Optional[str] = None
+    fob: Optional[str] = None
+    image_url: Optional[str] = None
+    out_of_stock: Optional[bool] = None
+    amazon_url: Optional[str] = None
+    walmart_url: Optional[str] = None
+    ebay_url: Optional[str] = None
+    offer_date: Optional[datetime] = None
+    last_sent: Optional[datetime] = None
+    sales_per_month: Optional[int] = None
+    net: Optional[float] = None
 
+# Authentication
+def verify_password(plain_password, hashed_password):
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
-# ================ GET /products/ ================
-@app.get("/products/")
-def get_products():
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except jwt.PyJWTError:
+        raise credentials_exception
+    return username
+
+@app.post("/login")
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM products;")
-    rows = cur.fetchall()
+    cur.execute("SELECT * FROM users WHERE username = %s", (form_data.username,))
+    user = cur.fetchone()
     cur.close()
     conn.close()
 
-    # Convert numeric id to string for consistency
-    for row in rows:
-        row["id"] = str(row["id"])
-    return {"products": rows}
+    if not user or not verify_password(form_data.password, user["password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user["username"]}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
 
+# Product routes
+@app.get("/products")
+async def get_products(current_user: str = Depends(get_current_user)):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM products ORDER BY date_added DESC")
+    products = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {"products": products}
 
-# ================ POST /products/ ================
-@app.post("/products/")
-def create_product(product: Product):
-    # Use the provided offer_date or default to the current datetime
-    offer_date_value = product.offer_date if product.offer_date is not None else datetime.now().isoformat()
-
+@app.post("/products")
+async def create_product(product: Product, current_user: str = Depends(get_current_user)):
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO products (
-          amazon_url, asin, price, moq, qty, upc, cost, vendor, lead_time,
-          exp_date, fob, profit_moq, image_url, title, category, out_of_stock,
-          walmart_url, ebay_url, offer_date
+          title, category, vendor_id, vendor, price, cost, moq, qty, upc, asin, lead_time,
+          exp_date, fob, image_url, out_of_stock, amazon_url, walmart_url, ebay_url, offer_date,
+          last_sent, sales_per_month, net, date_added
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        RETURNING id;
-    """, (
-        product.amazon_url,
-        product.asin,
-        product.price,
-        product.moq,
-        product.qty,
-        product.upc,
-        product.cost,
-        product.vendor,
-        product.lead_time,
-        product.exp_date,
-        product.fob,
-        product.profit_moq,
-        product.image_url,
-        product.title,
-        product.category,
-        product.out_of_stock,
-        product.walmart_url,
-        product.ebay_url,
-        offer_date_value
-    ))
-    new_id = cur.fetchone()["id"]
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
+        """, (
+            product.title, product.category, product.vendor_id, product.vendor, product.price, product.cost,
+            product.moq, product.qty, product.upc, product.asin, product.lead_time, product.exp_date, product.fob,
+            product.image_url, product.out_of_stock, product.amazon_url, product.walmart_url, product.ebay_url,
+            product.offer_date, product.last_sent, product.sales_per_month, product.net,
+            datetime.now()
+        ))
+    product_id = cur.fetchone()['id']
     conn.commit()
     cur.close()
     conn.close()
+    return {"message": "Product created successfully", "product_id": product_id}
 
-    return {"message": "Product created successfully", "product_id": str(new_id)}
-
-
-# ================ PATCH /products/{product_id}/ ================
-@app.patch("/products/{product_id}/")
-def update_product(product_id: int, product: ProductUpdate):
+@app.patch("/products/{id}")
+async def update_product(id: int, product: ProductUpdate, current_user: str = Depends(get_current_user)):
     conn = get_db_connection()
     cur = conn.cursor()
-    # Fetch current record
-    cur.execute("SELECT * FROM products WHERE id = %s;", (product_id,))
-    current = cur.fetchone()
-    if not current:
+    update_fields = []
+    values = []
+    if product.title is not None:
+        update_fields.append("title = %s")
+        values.append(product.title)
+    if product.category is not None:
+        update_fields.append("category = %s")
+        values.append(product.category)
+    if product.vendor_id is not None:
+        update_fields.append("vendor_id = %s")
+        values.append(product.vendor_id)
+    if product.vendor is not None:
+        update_fields.append("vendor = %s")
+        values.append(product.vendor)
+    if product.price is not None:
+        update_fields.append("price = %s")
+        values.append(product.price)
+    if product.cost is not None:
+        update_fields.append("cost = %s")
+        values.append(product.cost)
+    if product.moq is not None:
+        update_fields.append("moq = %s")
+        values.append(product.moq)
+    if product.qty is not None:
+        update_fields.append("qty = %s")
+        values.append(product.qty)
+    if product.upc is not None:
+        update_fields.append("upc = %s")
+        values.append(product.upc)
+    if product.asin is not None:
+        update_fields.append("asin = %s")
+        values.append(product.asin)
+    if product.lead_time is not None:
+        update_fields.append("lead_time = %s")
+        values.append(product.lead_time)
+    if product.exp_date is not None:
+        update_fields.append("exp_date = %s")
+        values.append(product.exp_date)
+    if product.fob is not None:
+        update_fields.append("fob = %s")
+        values.append(product.fob)
+    if product.image_url is not None:
+        update_fields.append("image_url = %s")
+        values.append(product.image_url)
+    if product.out_of_stock is not None:
+        update_fields.append("out_of_stock = %s")
+        values.append(product.out_of_stock)
+    if product.amazon_url is not None:
+        update_fields.append("amazon_url = %s")
+        values.append(product.amazon_url)
+    if product.walmart_url is not None:
+        update_fields.append("walmart_url = %s")
+        values.append(product.walmart_url)
+    if product.ebay_url is not None:
+        update_fields.append("ebay_url = %s")
+        values.append(product.ebay_url)
+    if product.offer_date is not None:
+        update_fields.append("offer_date = %s")
+        values.append(product.offer_date)
+    if product.last_sent is not None:
+        update_fields.append("last_sent = %s")
+        values.append(product.last_sent)
+    if product.sales_per_month is not None:
+        update_fields.append("sales_per_month = %s")
+        values.append(product.sales_per_month)
+    if product.net is not None:
+        update_fields.append("net = %s")
+        values.append(product.net)
+
+    if not update_fields:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    values.append(id)
+    query = f"UPDATE products SET {', '.join(update_fields)} WHERE id = %s"
+    cur.execute(query, values)
+    if cur.rowcount == 0:
         cur.close()
         conn.close()
         raise HTTPException(status_code=404, detail="Product not found")
 
-    new_amazon_url = product.amazon_url if product.amazon_url is not None else current["amazon_url"]
-    new_asin = product.asin if product.asin is not None else current["asin"]
-    new_price = product.price if product.price is not None else current["price"]
-    new_moq = product.moq if product.moq is not None else current["moq"]
-    new_qty = product.qty if product.qty is not None else current["qty"]
-    new_upc = product.upc if product.upc is not None else current["upc"]
-    new_cost = product.cost if product.cost is not None else current["cost"]
-    new_vendor = product.vendor if product.vendor is not None else current["vendor"]
-    new_lead_time = product.lead_time if product.lead_time is not None else current["lead_time"]
-    new_exp_date = product.exp_date if product.exp_date is not None else current["exp_date"]
-    new_fob = product.fob if product.fob is not None else current["fob"]
-    new_profit_moq = product.profit_moq if product.profit_moq is not None else current["profit_moq"]
-    new_image_url = product.image_url if product.image_url is not None else current["image_url"]
-    new_title = product.title if product.title is not None else current["title"]
-    new_category = product.category if product.category is not None else current["category"]
-    new_out_of_stock = product.out_of_stock if product.out_of_stock is not None else current["out_of_stock"]
-    new_walmart_url = product.walmart_url if product.walmart_url is not None else current["walmart_url"]
-    new_ebay_url = product.ebay_url if product.ebay_url is not None else current["ebay_url"]
-    new_offer_date = product.offer_date if product.offer_date is not None else current.get("offer_date")
-    new_last_sent = product.last_sent if product.last_sent is not None else current.get("last_sent")
-
-    update_query = """
-    UPDATE products SET 
-      amazon_url = %s,
-      asin = %s,
-      price = %s,
-      moq = %s,
-      qty = %s,
-      upc = %s,
-      cost = %s,
-      vendor = %s,
-      lead_time = %s,
-      exp_date = %s,
-      fob = %s,
-      profit_moq = %s,
-      image_url = %s,
-      title = %s,
-      category = %s,
-      out_of_stock = %s,
-      walmart_url = %s,
-      ebay_url = %s,
-      offer_date = %s,
-      last_sent = %s
-    WHERE id = %s;
-    """
-    cur.execute(update_query, (
-        new_amazon_url, new_asin, new_price, new_moq, new_qty, new_upc, new_cost,
-        new_vendor, new_lead_time, new_exp_date, new_fob, new_profit_moq, new_image_url,
-        new_title, new_category, new_out_of_stock, new_walmart_url, new_ebay_url,
-        new_offer_date, new_last_sent, product_id
-    ))
     conn.commit()
     cur.close()
     conn.close()
-    return {"message": "Product updated successfully", "product_id": product_id}
+    return {"message": "Product updated successfully"}
 
-# ================ DELETE /products/{product_id}/ ================
-@app.delete("/products/{product_id}/")
-def delete_product(product_id: int):
+@app.delete("/products/{id}")
+async def delete_product(id: int, current_user: str = Depends(get_current_user)):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("DELETE FROM products WHERE id = %s RETURNING id;", (product_id,))
-    deleted = cur.fetchone()
-    if not deleted:
-        cur.close()
-        conn.close()
-        raise HTTPException(status_code=404, detail="Product not found")
-    conn.commit()
-    cur.close()
-    conn.close()
-    return {"message": "Product deleted successfully", "product_id": product_id}
-
-# ================ POST /products/{product_id}/mark-out-of-stock/ ================
-@app.post("/products/{product_id}/mark-out-of-stock/")
-def mark_out_of_stock(product_id: int):
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("UPDATE products SET out_of_stock = TRUE WHERE id = %s RETURNING id;", (product_id,))
-    updated = cur.fetchone()
-    if not updated:
+    cur.execute("DELETE FROM products WHERE id = %s", (id,))
+    if cur.rowcount == 0:
         cur.close()
         conn.close()
         raise HTTPException(status_code=404, detail="Product not found")
     conn.commit()
     cur.close()
     conn.close()
-    return {"message": "Product marked as out-of-stock", "product_id": product_id}
+    return {"message": "Product deleted successfully"}
 
-# ================ POST /products/{product_id}/send-email/ ================
-@app.post("/products/{product_id}/send-email/")
-def send_product_email(product_id: int):
+@app.post("/products/{id}/mark-out-of-stock")
+async def mark_product_out_of_stock(id: int, current_user: str = Depends(get_current_user)):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM products WHERE id = %s;", (product_id,))
-    product_row = cur.fetchone()
-    if not product_row:
+    cur.execute("UPDATE products SET out_of_stock = true WHERE id = %s", (id,))
+    if cur.rowcount == 0:
         cur.close()
         conn.close()
         raise HTTPException(status_code=404, detail="Product not found")
-    title = product_row["title"] or "Untitled"
-    email_data = {
-        "subject": title,
-        "content": f"<h1>{title}</h1><p>Auto-generated single product email</p>",
-        "public": False,
-        "email_template_id": None
-    }
-    KIT_API_URL = "https://api.kit.com/v4/broadcasts"
-    HEADERS = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "X-Kit-Api-Key": "kit_a0a183e8fd744ca557d96126e488ae22"
-    }
-    try:
-        resp = requests.post(KIT_API_URL, data=json.dumps(email_data), headers=HEADERS)
-    except Exception as e:
-        cur.close()
-        conn.close()
-        raise HTTPException(status_code=400, detail=f"Error contacting Kit: {str(e)}")
-    if resp.status_code == 201:
-        now_str = datetime.now().isoformat()
-        cur.execute("UPDATE products SET last_sent=%s WHERE id=%s;", (now_str, product_id))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return {"success": True, "product_id": product_id, "last_sent": now_str}
-    else:
-        error_text = resp.text
-        cur.close()
-        conn.close()
-        raise HTTPException(status_code=400, detail=f"Kit API error: {error_text}")
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": "Product marked as out-of-stock"}
 
-
-# ================ POST /products/send-group-email/ ================
-@app.post("/products/send-group-email/")
-def send_group_email(product_ids: List[int]):
-    if not product_ids:
-        raise HTTPException(status_code=400, detail="No product IDs provided")
+@app.get("/products/search")
+async def search_products(query: str, current_user: str = Depends(get_current_user)):
     conn = get_db_connection()
     cur = conn.cursor()
-    format_strings = ",".join(["%s"] * len(product_ids))
-    cur.execute(f"SELECT * FROM products WHERE id IN ({format_strings});", tuple(product_ids))
-    rows = cur.fetchall()
-    if not rows:
-        cur.close()
-        conn.close()
-        raise HTTPException(status_code=404, detail="No matching products found")
-    combined_html = ""
-    for row in rows:
-        combined_html += f"<h2>{row['title']}</h2><p>Auto-generated group email content</p><hr>"
-    email_data = {
-        "subject": f"Group Deal: {len(rows)} Products",
-        "content": combined_html,
-        "public": False,
-        "email_template_id": None
-    }
-    KIT_API_URL = "https://api.kit.com/v4/broadcasts"
-    HEADERS = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "X-Kit-Api-Key": "kit_a0a183e8fd744ca557d96126e488ae22"
-    }
-    resp = requests.post(KIT_API_URL, data=json.dumps(email_data), headers=HEADERS)
-    if resp.status_code == 201:
-        now_str = datetime.now().isoformat()
-        cur.execute(
-            f"UPDATE products SET last_sent=%s WHERE id IN ({format_strings});",
-            (now_str, *product_ids)
-        )
-        conn.commit()
-        cur.close()
-        conn.close()
-        return {"success": True, "count": len(rows), "last_sent": now_str}
-    else:
-        err_text = resp.text
-        cur.close()
-        conn.close()
-        raise HTTPException(status_code=400, detail=f"Kit API error: {err_text}")
+    search_query = f"%{query}%"
+    cur.execute("""
+        SELECT * FROM products
+        WHERE title ILIKE %s
+        OR category ILIKE %s
+        OR vendor ILIKE %s
+        OR upc ILIKE %s
+        OR asin ILIKE %s
+        ORDER BY date_added DESC
+    """, (search_query, search_query, search_query, search_query, search_query))
+    products = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {"products": products}
