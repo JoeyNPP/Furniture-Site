@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: npp_deals
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: yourpassword
+      POSTGRES_PASSWORD: 26,Sheetpans!
     volumes:
       - pgdata:/var/lib/postgresql/data
 
