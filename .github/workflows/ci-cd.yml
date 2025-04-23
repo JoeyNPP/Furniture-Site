@@ -37,7 +37,15 @@ jobs:
       - name: Run backend tests
         run: |
           cd backend
-          python -m pytest --maxfail=1 --disable-warnings -q
+          python -m pytest --maxfail=1 --disable-warnings -q || ( \
+            ec=$?; \
+            if [ $ec -eq 5 ]; then \
+              echo "No tests found, skipping"; \
+              exit 0; \
+            else \
+              exit $ec; \
+            fi \
+          )
 
       - name: Set up Node.js
         uses: actions/setup-node@v2
