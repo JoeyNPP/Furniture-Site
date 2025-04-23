@@ -18,7 +18,11 @@ jobs:
           POSTGRES_PASSWORD: "26,Sheetpans!"
         ports:
           - 5432:5432
-        options: --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v2
@@ -37,15 +41,7 @@ jobs:
       - name: Run backend tests
         run: |
           cd backend
-          python -m pytest --maxfail=1 --disable-warnings -q || ( \
-            ec=$?; \
-            if [ $ec -eq 5 ]; then \
-              echo "No tests found, skipping"; \
-              exit 0; \
-            else \
-              exit $ec; \
-            fi \
-          )
+          python -m pytest --maxfail=1 --disable-warnings -q
 
       - name: Set up Node.js
         uses: actions/setup-node@v2
@@ -55,7 +51,7 @@ jobs:
       - name: Install frontend dependencies
         run: |
           cd frontend
-          npm ci
+          npm install
 
       - name: Run frontend tests
         run: |
