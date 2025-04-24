@@ -1,29 +1,30 @@
-version: '3.8'
 services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: npp_deals-backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: npp_deals-frontend
+    ports:
+      - "80:80"
+
   db:
     image: postgres:13
     environment:
       POSTGRES_DB: npp_deals
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 26,Sheetpans!
+      POSTGRES_PASSWORD: "26,Sheetpans!"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
-    environment:
-      DATABASE_URL: postgresql://postgres:yourpassword@db:5432/npp_deals
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
+      - npp_deals_pgdata:/var/lib/postgresql/data
 
 volumes:
-  pgdata:
+  npp_deals_pgdata:
