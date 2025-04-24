@@ -1,3 +1,4 @@
+# /root/NPP_Deals/.github/workflows/ci-cd.yml
 name: CI/CD Pipeline
 
 on:
@@ -36,7 +37,7 @@ jobs:
         run: |
           cd backend
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest
+          python -m pip install -r requirements.txt
 
       - name: Run backend tests
         run: |
@@ -51,7 +52,7 @@ jobs:
       - name: Install frontend dependencies
         run: |
           cd frontend
-          npm install
+          npm ci
 
       - name: Run frontend tests
         run: |
@@ -74,5 +75,5 @@ jobs:
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           script: |
             cd /root/NPP_Deals
-            docker compose pull
+            # build & start fresh—no pull from registry
             docker compose up -d --build
