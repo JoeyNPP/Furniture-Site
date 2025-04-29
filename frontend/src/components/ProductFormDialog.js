@@ -121,15 +121,18 @@ const ProductFormDialog = ({ open, mode, initialData, onClose, onSubmit, timezon
     e.preventDefault();
     console.log("Form submitted with data:", formData);
     // Convert empty strings to null for numeric fields before submitting
-    const submitData = {
-      ...formData,
-      price: formData.price === "" ? null : formData.price,
-      cost: formData.cost === "" ? null : formData.cost,
-      moq: formData.moq === "" ? null : formData.moq,
-      qty: formData.qty === "" ? null : formData.qty,
-      sales_per_month: formData.sales_per_month === "" ? null : formData.sales_per_month,
-      net: formData.net === "" ? null : formData.net,
-    };
+   const submitData = {
+     ...formData,
+     price: formData.price === "" ? null : formData.price,
+     cost: formData.cost === "" ? null : formData.cost,
+     moq: formData.moq === "" ? null : formData.moq,
+     qty: formData.qty === "" ? null : formData.qty,
+     sales_per_month: formData.sales_per_month === "" ? null : formData.sales_per_month,
+     net: formData.net === "" ? null : formData.net,
++    // strip empty date strings so backend will default them
++    offer_date: formData.offer_date === "" ? undefined : formData.offer_date,
++    last_sent:  formData.last_sent  === "" ? undefined : formData.last_sent,
+   };    
     onSubmit(submitData);
   };
 
