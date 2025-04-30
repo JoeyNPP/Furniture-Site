@@ -58,7 +58,7 @@ async function createProduct(data) {
 }
 
 async function updateProduct(id, data) {
-  console.log(`Preparing PATCH for ID: ${id} with data:`, data);
+  console.log(`Preparing PATCH for ID: ${id} with data:`, JSON.stringify(data, null, 2));
   const token = localStorage.getItem('token');
   if (!token) {
     throw new Error('No token found');
