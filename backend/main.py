@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
@@ -10,13 +12,18 @@ import bcrypt
 
 app = FastAPI()
 
+# Load environment variables
+load_dotenv('.env.local', override=True)  # Prefer .env.local for local testing
+load_dotenv('.env')  # Fallback to .env for live
+
 # Database connection
 def get_db_connection():
     return psycopg2.connect(
-        dbname="npp_deals",
-        user="postgres",
-        password="26,Sheetpans!",
-        host="localhost",
+        dbname=os.getenv("DB_NAME", "npp_deals"),
+        user=os.getenv("DB_USER", "postgres"),
+        password=os.getenv("DB_PASSWORD", "26,Sheetpans!"),
+        host=os.getenv("DB_HOST", "localhost"),
+        port=os.getenv("DB_PORT", "5432"),
         cursor_factory=RealDictCursor
     )
 
@@ -114,7 +121,6 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     user = cur.fetchone()
     cur.close()
     conn.close()
-
     if not user or not verify_password(form_data.password, user["password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -235,12 +241,10 @@ async def update_product(id: int, product: ProductUpdate, current_user: str = De
     if product.net is not None:
         update_fields.append("net = %s")
         values.append(product.net)
-
     if not update_fields:
         cur.close()
         conn.close()
         raise HTTPException(status_code=400, detail="No fields to update")
-
     values.append(id)
     query = f"UPDATE products SET {', '.join(update_fields)} WHERE id = %s"
     cur.execute(query, values)
@@ -248,7 +252,6 @@ async def update_product(id: int, product: ProductUpdate, current_user: str = De
         cur.close()
         conn.close()
         raise HTTPException(status_code=404, detail="Product not found")
-
     conn.commit()
     cur.close()
     conn.close()
