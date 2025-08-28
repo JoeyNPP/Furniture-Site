@@ -1,4 +1,4 @@
-const API_URL = 'http://104.131.49.141:8000';
+const API_URL = 'http://159.65.184.143:8000';
 
 async function login(username, password) {
   const response = await fetch(`${API_URL}/login`, {

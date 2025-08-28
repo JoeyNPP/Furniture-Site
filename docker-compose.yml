@@ -1,30 +1,33 @@
+version: '3.7'
 services:
-  backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    image: npp_deals-backend
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
-
-  frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-    image: npp_deals-frontend
-    ports:
-      - "80:80"
-
-  db:
+  npp_deals_test-db:
     image: postgres:13
     environment:
-      POSTGRES_DB: npp_deals
+      POSTGRES_DB: npp_deals_test
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "26,Sheetpans!"
     volumes:
-      - npp_deals_pgdata:/var/lib/postgresql/data
-
+      - pgdata:/var/lib/postgresql/data
+  npp_deals_test-backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DB_NAME: npp_deals_test
+      DB_USER: postgres
+      DB_PASSWORD: "26,Sheetpans!"
+      DB_HOST: npp_deals_test-db
+      DB_PORT: 5432
+      SECRET_KEY: a-very-strong-secret-key
+    depends_on:
+      - npp_deals_test-db
+  npp_deals_test-frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    environment:
+      FRONTEND_URL: "http://159.65.184.143"
+    depends_on:
+      - npp_deals_test-backend
 volumes:
-  npp_deals_pgdata:
+  pgdata:
