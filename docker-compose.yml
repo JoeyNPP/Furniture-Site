@@ -1,4 +1,4 @@
-version: '3.8'
+version: '3.7'
 services:
   db:
     image: postgres:13
@@ -11,12 +11,46 @@ services:
 
   backend:
     build: ./backend
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgresql://postgres:yourpassword@db:5432/npp_deals
+      DATABASE_URL: postgresql://postgres:26,Sheetpans!@db:5432/npp_deals
+      SECRET_KEY: a-very-strong-secret-key
+      FRONTEND_URL: "http://104.131.49.141"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:1~version: '3.7'
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: npp_deals
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 26,Sheetpans!
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://postgres:26,Sheetpans!@db:5432/npp_deals
+      SECRET_KEY: a-very-strong-secret-key
+      FRONTEND_URL: "http://104.131.49.141"
 
   frontend:
     build: ./frontend
