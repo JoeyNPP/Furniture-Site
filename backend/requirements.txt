@@ -3,3 +3,4 @@ uvicorn>=0.22.0
 psycopg2-binary>=2.9.6
 python-dotenv>=0.21.0
 uvicorn[standard]
+PyJWT>=2.0.0
