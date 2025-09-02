@@ -30,7 +30,7 @@ import {
 } from "../api";
 import { sendIndividualEmails, sendGroupEmail } from "../emailSender";
 import * as XLSX from "xlsx";
-import { jwtDecode } from "jwt-decode";
+import jwt_decode from "jwt-decode";
 
 const InternalProductList = ({ onBack }) => {
   const [products, setProducts] = useState([]);
@@ -64,7 +64,7 @@ const InternalProductList = ({ onBack }) => {
     }
 
     try {
-      const decodedToken = jwtDecode(token);
+      const decodedToken = jwt_decode(token);
       const expirationTime = decodedToken.exp * 1000;
       const currentTime = Date.now();
       if (expirationTime < currentTime) {
