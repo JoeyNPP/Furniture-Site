@@ -1,11 +1,10 @@
 # syntax=docker/dockerfile:1
-FROM node:18 AS builder
+FROM node:16 AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 RUN npm install react-scripts --save
 COPY . .
-ENV NODE_OPTIONS=--openssl-legacy-provider
 RUN npm run build
 
 FROM nginx:alpine
