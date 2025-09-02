@@ -52,7 +52,6 @@ const InternalProductList = ({ onBack }) => {
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-
   const drawerWidth = isMobile ? 150 : 200;
   const timezone = "America/New_York";
 
@@ -62,7 +61,6 @@ const InternalProductList = ({ onBack }) => {
       navigate("/login");
       return;
     }
-
     try {
       const decodedToken = jwt_decode(token);
       const expirationTime = decodedToken.exp * 1000;
@@ -233,7 +231,7 @@ const InternalProductList = ({ onBack }) => {
       return;
     }
     try {
-      const decodedToken = jwtDecode(token);
+      const decodedToken = jwt_decode(token);
       const expirationTime = decodedToken.exp * 1000;
       const currentTime = Date.now();
       if (expirationTime < currentTime) {
@@ -328,13 +326,11 @@ const InternalProductList = ({ onBack }) => {
       console.log("Checking product:", product.title, "Offer Date:", product.offer_date, "Formatted:", formattedOfferDate, "In Stock:", !product.out_of_stock);
       return offerDate >= sixWeeksAgo && !isNaN(offerDate.getTime());
     });
-
     const sortedProducts = [...recentInStockProducts].sort((a, b) => {
       const dateA = a.offer_date ? new Date(a.offer_date) : new Date(0);
       const dateB = b.offer_date ? new Date(b.offer_date) : new Date(0);
       return dateB - dateA;
     });
-
     const groupedByDate = {};
     sortedProducts.forEach((product) => {
       const date = product.offer_date
@@ -345,7 +341,6 @@ const InternalProductList = ({ onBack }) => {
       }
       groupedByDate[date].push(product);
     });
-
     const data = [];
     data.push(["Unnamed: 0", ".1", ".2", ".3", ".4", "Unnamed: 6", "Unnamed: 7", "Unnamed: 8", "Unnamed: 9", "Unnamed: 10", "Unnamed: 11", "Unnamed: 12", "Unnamed: 13"]);
     data.push([
@@ -364,7 +359,6 @@ const InternalProductList = ({ onBack }) => {
       "Net",
       "ROI (%)"
     ]);
-
     Object.keys(groupedByDate).sort((a, b) => new Date(b) - new Date(a)).forEach((date) => {
       data.push([date]);
       groupedByDate[date].forEach((product) => {
@@ -392,12 +386,9 @@ const InternalProductList = ({ onBack }) => {
         ]);
       });
     });
-
     data.push([]);
-
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(data);
-
     const range = XLSX.utils.decode_range(ws["!ref"]);
     for (let R = range.s.r; R <= range.e.r; ++R) {
       for (let C = range.s.c; C <= range.e.c; ++C) {
@@ -412,7 +403,6 @@ const InternalProductList = ({ onBack }) => {
         };
       }
     }
-
     const logoUrl = "http://104.131.49.141:3000/assets/logo.png";
     fetch(logoUrl)
       .then(response => response.blob())
@@ -431,7 +421,6 @@ const InternalProductList = ({ onBack }) => {
               to: { col: 2, row: 2 }
             }
           }];
-
           ws["!cols"] = [
             { wch: 50 },
             { wch: 15 },
@@ -448,7 +437,6 @@ const InternalProductList = ({ onBack }) => {
             { wch: 15 },
             { wch: 15 }
           ];
-
           XLSX.utils.book_append_sheet(wb, ws, "Inventory");
           XLSX.writeFile(wb, `inventory_${new Date().toLocaleString('en-US', { timeZone: timezone }).split(',')[0].replace(/\//g, '-')}.xlsx`, { compression: true });
         };
