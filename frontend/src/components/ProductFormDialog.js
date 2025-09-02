@@ -129,9 +129,9 @@ const ProductFormDialog = ({ open, mode, initialData, onClose, onSubmit, timezon
      qty: formData.qty === "" ? null : formData.qty,
      sales_per_month: formData.sales_per_month === "" ? null : formData.sales_per_month,
      net: formData.net === "" ? null : formData.net,
-+    // strip empty date strings so backend will default them
-+    offer_date: formData.offer_date === "" ? undefined : formData.offer_date,
-+    last_sent:  formData.last_sent  === "" ? undefined : formData.last_sent,
+     // strip empty date strings so backend will default them
+     offer_date: formData.offer_date === "" ? undefined : formData.offer_date,
+     last_sent:  formData.last_sent  === "" ? undefined : formData.last_sent,
    };    
     onSubmit(submitData);
   };
