@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 FROM node:16 AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-RUN npm install react-scripts --save
+COPY package.json package-lock.json ./
+RUN npm ci --legacy-peer-deps
+RUN npm install react-scripts@3.0.1 --save --legacy-peer-deps
 COPY . .
 RUN npm run build
 
