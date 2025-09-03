@@ -1,16 +1,17 @@
+version: '3.8'
 services:
   npp_deals-db:
     image: postgres:13
     environment:
-      POSTGRES_DB: npp_deals
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "26,Sheetpans!"
-volumes:
+      POSTGRES_DB: npp_deals
+    volumes:
       - db_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U <postgres>"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
