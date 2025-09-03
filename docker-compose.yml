@@ -6,27 +6,24 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "26,Sheetpans!"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
   npp_deals-backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
-    environment:
-      DB_NAME: npp_deals
-      DB_USER: postgres
-      DB_PASSWORD: "26,Sheetpans!"
-      DB_HOST: npp_deals-db
-      DB_PORT: 5432
-      SECRET_KEY: a-very-strong-secret-key
     depends_on:
       - npp_deals-db
   npp_deals-frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
       - "80:80"
-    environment:
-      FRONTEND_URL: "http://104.131.49.141"
     depends_on:
       - npp_deals-backend
 volumes:
-  pgdata:
+  db_data:
