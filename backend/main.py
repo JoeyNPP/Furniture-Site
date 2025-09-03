@@ -89,6 +89,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
+# Root endpoint for healthcheck
+@app.get("/")
+async def root():
+    return {"message": "NPP Deals Backend"}
+
 # Pydantic models
 class Product(BaseModel):
     title: Optional[str] = None
