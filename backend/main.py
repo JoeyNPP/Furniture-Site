@@ -22,13 +22,67 @@ def get_db_connection():
         dbname=os.getenv("DB_NAME", "npp_deals"),
         user=os.getenv("DB_USER", "postgres"),
         password=os.getenv("DB_PASSWORD", "26,Sheetpans!"),
-        host=os.getenv("DB_HOST", "localhost"),
+        host=os.getenv("DB_HOST", "npp_deals-db"),
         port=os.getenv("DB_PORT", "5432"),
         cursor_factory=RealDictCursor
     )
 
+# Create tables
+def init_db():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS products (
+            id SERIAL PRIMARY KEY,
+            title TEXT,
+            category TEXT,
+            vendor_id TEXT,
+            vendor TEXT,
+            price FLOAT,
+            cost FLOAT,
+            moq INTEGER,
+            qty INTEGER,
+            upc TEXT,
+            asin TEXT,
+            lead_time TEXT,
+            exp_date TEXT,
+            fob TEXT,
+            image_url TEXT,
+            out_of_stock BOOLEAN DEFAULT FALSE,
+            amazon_url TEXT,
+            walmart_url TEXT,
+            ebay_url TEXT,
+            offer_date TIMESTAMP,
+            last_sent TIMESTAMP,
+            sales_per_month INTEGER,
+            net FLOAT,
+            date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            password TEXT NOT NULL
+        )
+    """)
+    # Insert default user if not exists
+    cur.execute("""
+        INSERT INTO users (username, password)
+        VALUES (%s, %s)
+        ON CONFLICT (username) DO NOTHING
+    """, (
+        "joey/alex",
+        bcrypt.hashpw("Winter2025$".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    ))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+# Initialize database
+init_db()
+
 # JWT settings
-SECRET_KEY = "your-secret-key"
+SECRET_KEY = os.getenv("SECRET_KEY", "a-very-strong-secret-key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
