@@ -29,21 +29,16 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      npp_deals-db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - npp_deals-db
   npp_deals-frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    environment:
+      FRONTEND_URL: http://localhost
     ports:
       - "80:80"
     depends_on:
-      npp_deals-backend:
-        condition: service_healthy
+      - npp_deals-backend
 volumes:
   db_data:
