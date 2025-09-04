@@ -1,4 +1,4 @@
-const API_URL = process.env.REACT_APP_API_URL || 'http://159.65.184.143:8000';
+const API_BASE_URL = process.env.REACT_APP_FRONTEND_URL || 'http://159.65.184.143:8000';
 
 async function login(username, password) {
   try {
