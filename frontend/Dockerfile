@@ -1,12 +1,9 @@
-# syntax=docker/dockerfile:1
-FROM node:16 AS builder
+FROM node:16-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps
-RUN npm install react-scripts@4.0.3 --save --legacy-peer-deps
+RUN npm ci --omit=dev
 COPY . .
 RUN npm run build
-
 FROM nginx:alpine
 COPY --from=builder /app/build /usr/share/nginx/html
 COPY default.conf /etc/nginx/conf.d/default.conf
