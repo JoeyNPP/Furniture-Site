@@ -7,6 +7,7 @@ services:
       POSTGRES_DB: npp_deals
     volumes:
       - pgdata:/var/lib/postgresql/data
+    container_name: npp_deals_npp_deals-db-1
   npp_deals-backend:
     build: ./backend
     environment:
@@ -20,6 +21,7 @@ services:
       - "8000:8000"
     depends_on:
       - npp_deals-db
+    container_name: npp_deals_npp_deals-backend-1
   npp_deals-frontend:
     build:
       context: ./frontend
@@ -30,5 +32,6 @@ services:
       - "80:80"
     depends_on:
       - npp_deals-backend
+    container_name: npp_deals_npp_deals-frontend-1
 volumes:
   pgdata:
