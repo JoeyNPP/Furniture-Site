@@ -7,12 +7,8 @@ services:
       POSTGRES_DB: npp_deals
     volumes:
       - pgdata:/var/lib/postgresql/data
-    networks:
-      - npp_network
   npp_deals-backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: ./backend
     environment:
       DB_NAME: npp_deals
       DB_USER: postgres
@@ -24,19 +20,13 @@ services:
       - "8000:8000"
     depends_on:
       - npp_deals-db
-    networks:
-      - npp_network
-npp_deals-frontend:
-  build:
-    context: ./frontend
-    dockerfile: Dockerfile
-    args:
-      REACT_APP_FRONTEND_URL: http://localhost:8000
-  environment:
-    REACT_APP_FRONTEND_URL: http://localhost:8000
-  ports:
-    - "80:80"
-  depends_on:
-    - npp_deals-backend
-  networks:
-    - npp_network
+  npp_deals-frontend:
+    build: ./frontend
+    environment:
+      REACT_APP_FRONTEND_URL: http://159.65.184.143:8000
+    ports:
+      - "80:80"
+    depends_on:
+      - npp_deals-backend
+volumes:
+  pgdata:
