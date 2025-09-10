@@ -1,4 +1,6 @@
-FROM node:16-alpine AS builder
+FROM node:18-alpine AS builder
+ARG REACT_APP_FRONTEND_URL
+ENV REACT_APP_FRONTEND_URL=$REACT_APP_FRONTEND_URL
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
