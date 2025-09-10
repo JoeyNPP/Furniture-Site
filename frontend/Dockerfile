@@ -1,8 +1,7 @@
-FROM node:18 AS builder
+FROM node:20 AS builder
 ARG REACT_APP_FRONTEND_URL
 ENV REACT_APP_FRONTEND_URL=$REACT_APP_FRONTEND_URL
 WORKDIR /app
-RUN npm install -g npm@11.6.0
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY . .
