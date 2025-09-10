@@ -1,9 +1,8 @@
 const API_BASE_URL = process.env.REACT_APP_FRONTEND_URL || 'http://159.65.184.143:8000';
-
 async function login(username, password) {
   try {
     console.log(`Attempting login request for username: ${username}`);
-    const response = await fetch(`${API_URL}/login`, {
+    const response = await fetch(`${API_BASE_URL}/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
