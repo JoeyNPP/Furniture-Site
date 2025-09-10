@@ -1,7 +1,7 @@
 FROM node:20 AS builder
 ARG REACT_APP_FRONTEND_URL
 ENV REACT_APP_FRONTEND_URL=$REACT_APP_FRONTEND_URL
-ENV NODE_OPTIONS=--max-old-space-size=4096 --openssl-legacy-provider
+ENV NODE_OPTIONS="--max-old-space-size=4096 --openssl-legacy-provider"
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --legacy-peer-deps
