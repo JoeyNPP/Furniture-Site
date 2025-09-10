@@ -25,7 +25,6 @@ async function login(username, password) {
     throw error;
   }
 }
-
 async function fetchProducts() {
   try {
     const token = localStorage.getItem('token');
@@ -34,7 +33,7 @@ async function fetchProducts() {
       throw new Error('No token found');
     }
     console.log('Attempting to fetch products');
-    const response = await fetch(`${API_URL}/products`, {
+    const response = await fetch(`${API_BASE_URL}/products`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -53,7 +52,6 @@ async function fetchProducts() {
     throw error;
   }
 }
-
 async function createProduct(data) {
   try {
     const token = localStorage.getItem('token');
@@ -62,7 +60,7 @@ async function createProduct(data) {
       throw new Error('No token found');
     }
     console.log('Sending POST with data:', data);
-    const response = await fetch(`${API_URL}/products`, {
+    const response = await fetch(`${API_BASE_URL}/products`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -83,7 +81,6 @@ async function createProduct(data) {
     throw error;
   }
 }
-
 async function updateProduct(id, data) {
   try {
     const token = localStorage.getItem('token');
@@ -92,7 +89,7 @@ async function updateProduct(id, data) {
       throw new Error('No token found');
     }
     console.log(`Preparing PATCH for ID: ${id} with data:`, JSON.stringify(data, null, 2));
-    const response = await fetch(`${API_URL}/products/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/products/${id}`, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -114,7 +111,6 @@ async function updateProduct(id, data) {
     throw error;
   }
 }
-
 async function deleteProduct(id) {
   try {
     const token = localStorage.getItem('token');
@@ -123,7 +119,7 @@ async function deleteProduct(id) {
       throw new Error('No token found');
     }
     console.log(`Attempting to delete product with ID: ${id}`);
-    const response = await fetch(`${API_URL}/products/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/products/${id}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -143,7 +139,6 @@ async function deleteProduct(id) {
     throw error;
   }
 }
-
 async function markOutOfStock(id) {
   try {
     const token = localStorage.getItem('token');
@@ -152,7 +147,7 @@ async function markOutOfStock(id) {
       throw new Error('No token found');
     }
     console.log(`Attempting to mark product out-of-stock for ID: ${id}`);
-    const response = await fetch(`${API_URL}/products/${id}/mark-out-of-stock`, {
+    const response = await fetch(`${API_BASE_URL}/products/${id}/mark-out-of-stock`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -172,7 +167,6 @@ async function markOutOfStock(id) {
     throw error;
   }
 }
-
 async function searchProducts(query) {
   try {
     const token = localStorage.getItem('token');
@@ -181,7 +175,7 @@ async function searchProducts(query) {
       throw new Error('No token found');
     }
     console.log(`Attempting to search products with query: ${query}`);
-    const response = await fetch(`${API_URL}/products/search?query=${encodeURIComponent(query)}`, {
+    const response = await fetch(`${API_BASE_URL}/products/search?query=${encodeURIComponent(query)}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -200,5 +194,4 @@ async function searchProducts(query) {
     throw error;
   }
 }
-
 export { login, fetchProducts, createProduct, updateProduct, deleteProduct, markOutOfStock, searchProducts };
