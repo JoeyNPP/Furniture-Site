@@ -1,3 +1,5 @@
+import { jwtDecode } from 'jwt-decode'; // Updated import for jwt-decode@4.0.0
+
 const API_BASE_URL = process.env.REACT_APP_FRONTEND_URL || 'http://159.65.184.143:8000';
 async function login(username, password) {
   try {
@@ -32,7 +34,9 @@ async function fetchProducts() {
       console.error('Fetch products failed: No token found');
       throw new Error('No token found');
     }
-    console.log('Attempting to fetch products');
+    // Decode token if needed (example usage)
+    const decodedToken = jwtDecode(token);
+    console.log('Attempting to fetch products with decoded token:', decodedToken);
     const response = await fetch(`${API_BASE_URL}/products`, {
       headers: {
         'Authorization': `Bearer ${token}`,
