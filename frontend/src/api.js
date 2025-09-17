@@ -1,4 +1,4 @@
-import { jwtDecode } from 'jwt-decode'; // Updated import for jwt-decode@4.0.0
+import { jwtDecode } from 'jwt-decode'; // Corrected import for jwt-decode@4.0.0
 
 const API_BASE_URL = process.env.REACT_APP_FRONTEND_URL || 'http://159.65.184.143:8000';
 async function login(username, password) {
