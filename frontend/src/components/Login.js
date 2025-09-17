@@ -4,15 +4,17 @@ import { TextField, Button, Box, Typography, Container } from "@mui/material";
 import { login } from "../api";
 
 const Login = () => {
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState("joey/alex"); // Default to intended username
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Use the intended username if form input is empty or invalid, otherwise use input
+    const finalUsername = username.trim() === "" ? "joey/alex" : username;
     try {
-      const response = await login(username, password);
+      const response = await login(finalUsername, password);
       const { access_token } = response;
       if (access_token) {
         localStorage.setItem("token", access_token);
