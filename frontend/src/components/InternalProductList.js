@@ -30,7 +30,7 @@ import {
 } from "../api";
 import { sendIndividualEmails, sendGroupEmail } from "../emailSender";
 import * as XLSX from "xlsx";
-import jwt_decode from "jwt-decode";
+import { jwtDecode } from 'jwt-decode';
 
 const InternalProductList = ({ onBack }) => {
   const [products, setProducts] = useState([]);
@@ -62,7 +62,7 @@ const InternalProductList = ({ onBack }) => {
       return;
     }
     try {
-      const decodedToken = jwt_decode(token);
+      const decodedToken = jwtdecode(token);
       const expirationTime = decodedToken.exp * 1000;
       const currentTime = Date.now();
       if (expirationTime < currentTime) {
@@ -231,7 +231,7 @@ const InternalProductList = ({ onBack }) => {
       return;
     }
     try {
-      const decodedToken = jwt_decode(token);
+      const decodedToken = jwtdecode(token);
       const expirationTime = decodedToken.exp * 1000;
       const currentTime = Date.now();
       if (expirationTime < currentTime) {
@@ -560,7 +560,7 @@ const InternalProductList = ({ onBack }) => {
           await handleMarkOutOfStock(params.row.id);
         };
         return (
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing= "1">
             <Button variant="outlined" size="small" onClick={handleEdit}>
               Edit
             </Button>
