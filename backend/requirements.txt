@@ -1,8 +1,7 @@
-fastapi>=0.95.2
-uvicorn>=0.22.0
-psycopg2-binary>=2.9.6
-python-dotenv>=0.21.0
-uvicorn[standard]
-PyJWT>=2.0.0
-bcrypt>=3.2.0
-python-multipart>=0.0.9
+fastapi==0.116.2
+uvicorn[standard]==0.33.0
+psycopg2-binary==2.9.10
+python-dotenv==1.0.1
+PyJWT==2.9.0
+bcrypt==4.3.0
+python-multipart==0.0.20

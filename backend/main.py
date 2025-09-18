@@ -1,6 +1,8 @@
 import os
+import csv
+import io
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import Optional, List
@@ -361,4 +363,131 @@ async def search_products(query: str, current_user: str = Depends(get_current_us
     products = cur.fetchall()
     cur.close()
     conn.close()
-    return {"products": products}
+    return {"products": products}@app.post("/products/import")
+async def import_products(file: UploadFile = File(...), current_user: str = Depends(get_current_user)):
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    try:
+        text = contents.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = contents.decode("latin-1")
+    reader = csv.DictReader(io.StringIO(text))
+    if reader.fieldnames is None:
+        raise HTTPException(status_code=400, detail="CSV file is missing headers")
+
+    field_map = {
+        "date": "offer_date",
+        "amazon url": "amazon_url",
+        "asin": "asin",
+        "price": "price",
+        "moq": "moq",
+        "qty": "qty",
+        "upc": "upc",
+        "cost": "cost",
+        "vendor": "vendor",
+        "lead time": "lead_time",
+        "exp date": "exp_date",
+        "fob": "fob",
+        "vendor id": "vendor_id",
+        "image url": "image_url",
+        "title": "title",
+        "category": "category",
+        "walmart url": "walmart_url",
+        "ebay url": "ebay_url",
+        "sales per month": "sales_per_month",
+        "net": "net"
+    }
+    float_fields = {"price", "cost", "net", "sales_per_month"}
+    int_fields = {"moq", "qty"}
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    inserted = updated = skipped = 0
+
+    for raw_row in reader:
+        row = {(key or "").strip(): (value or "").strip() for key, value in raw_row.items()}
+        normalized = {key.lower(): value for key, value in row.items() if key}
+
+        asin_value = normalized.get("asin") or None
+        title_value = normalized.get("title") or None
+        if not asin_value and not title_value:
+            skipped += 1
+            continue
+
+        record = {}
+        for header, column in field_map.items():
+            value = normalized.get(header)
+            if value in (None, ""):
+                continue
+            if column in float_fields:
+                try:
+                    record[column] = float(value.replace(",", ""))
+                except ValueError:
+                    continue
+            elif column in int_fields:
+                try:
+                    record[column] = int(float(value.replace(",", "")))
+                except ValueError:
+                    continue
+            elif column == "offer_date":
+                parsed = None
+                for pattern in ("%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y"):
+                    try:
+                        parsed = datetime.strptime(value, pattern)
+                        break
+                    except ValueError:
+                        continue
+                if parsed:
+                    record[column] = parsed
+            else:
+                record[column] = value
+
+        product_id = None
+        if asin_value:
+            cur.execute("SELECT id FROM products WHERE asin = %s", (asin_value,))
+            match = cur.fetchone()
+            if match:
+                product_id = match["id"]
+        if product_id is None and title_value:
+            cur.execute("SELECT id FROM products WHERE title = %s", (title_value,))
+            match = cur.fetchone()
+            if match:
+                product_id = match["id"]
+
+        if product_id:
+            if record:
+                update_fields = []
+                values = []
+                for column, value in record.items():
+                    update_fields.append(f"{column} = %s")
+                    values.append(value)
+                values.append(product_id)
+                cur.execute(
+                    f"UPDATE products SET {', '.join(update_fields)} WHERE id = %s",
+                    values
+                )
+                updated += 1
+            else:
+                skipped += 1
+        else:
+            if record:
+                columns = list(record.keys())
+                placeholders = ["%s"] * len(columns)
+                values = [record[column] for column in columns]
+                columns.append("date_added")
+                placeholders.append("%s")
+                values.append(datetime.now())
+                cur.execute(
+                    f"INSERT INTO products ({', '.join(columns)}) VALUES ({', '.join(placeholders)})",
+                    values
+                )
+                inserted += 1
+            else:
+                skipped += 1
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return {"inserted": inserted, "updated": updated, "skipped": skipped}

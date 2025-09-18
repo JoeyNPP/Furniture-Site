@@ -1,4 +1,4 @@
-import { jwtDecode } from 'jwt-decode'; // Corrected import for jwt-decode@4.0.0
+﻿import { jwtDecode } from 'jwt-decode'; // Corrected import for jwt-decode@4.0.0
 
 const API_BASE_URL = process.env.REACT_APP_FRONTEND_URL || 'http://159.65.184.143:8000';
 async function login(username, password) {
@@ -171,6 +171,36 @@ async function markOutOfStock(id) {
     throw error;
   }
 }
+async function uploadProducts(file) {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('Upload products failed: No token found');
+      throw new Error('No token found');
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE_URL}/products/import`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Upload products failed with status ${response.status}: ${errorText}`);
+      throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+    }
+    const result = await response.json();
+    console.log('Products uploaded successfully:', result);
+    return result;
+  } catch (error) {
+    console.error(`Upload products error: ${error.message}`);
+    throw error;
+  }
+}
+
 async function searchProducts(query) {
   try {
     const token = localStorage.getItem('token');
@@ -198,4 +228,4 @@ async function searchProducts(query) {
     throw error;
   }
 }
-export { login, fetchProducts, createProduct, updateProduct, deleteProduct, markOutOfStock, searchProducts };
+export { login, fetchProducts, createProduct, updateProduct, deleteProduct, markOutOfStock, searchProducts, uploadProducts };
