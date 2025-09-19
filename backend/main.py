@@ -3,6 +3,7 @@ import csv
 import io
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import Optional, List
@@ -13,6 +14,19 @@ import jwt
 import bcrypt
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://159.65.184.143",
+        "http://159.65.184.143:80",
+        "http://159.65.184.143:3000",
+        "http://localhost",
+        "http://localhost:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Load environment variables
 load_dotenv('.env.local', override=True)  # Prefer .env.local for local testing
