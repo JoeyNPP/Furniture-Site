@@ -81,15 +81,17 @@ def init_db():
             password TEXT NOT NULL
         )
     """)
-    # Insert default user if not exists
-    cur.execute("""
-        INSERT INTO users (username, password)
-        VALUES (%s, %s)
-        ON CONFLICT (username) DO NOTHING
-    """, (
-        "joey/alex",
-        bcrypt.hashpw("Winter2025$".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    ))
+    # Ensure default users exist with shared credentials
+    cur.execute("DELETE FROM users WHERE username = %s", ("joey/alex",))
+    for username in ("joey", "alex"):
+        cur.execute("""
+            INSERT INTO users (username, password)
+            VALUES (%s, %s)
+            ON CONFLICT (username) DO NOTHING
+        """, (
+            username,
+            bcrypt.hashpw("Winter2025$".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        ))
     conn.commit()
     cur.close()
     conn.close()
