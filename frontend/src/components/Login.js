@@ -4,7 +4,7 @@ import { TextField, Button, Box, Typography, Container } from "@mui/material";
 import { login } from "../api";
 
 const Login = () => {
-  const [username, setUsername] = useState("joey/alex"); // Default to intended username
+  const [username, setUsername] = useState("joey"); // Default to commonly used account
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
@@ -12,7 +12,7 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     // Use the intended username if form input is empty or invalid, otherwise use input
-    const finalUsername = username.trim() === "" ? "joey/alex" : username;
+    const finalUsername = username.trim() === "" ? "joey" : username.trim();
     try {
       const response = await login(finalUsername, password);
       const { access_token } = response;
@@ -45,6 +45,7 @@ const Login = () => {
             autoFocus
             value={username}
             onChange={(e) => setUsername(e.target.value)}
+            helperText="Use username 'joey' or 'alex'"
           />
           <TextField
             margin="normal"
