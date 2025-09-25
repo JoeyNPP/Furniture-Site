@@ -27,6 +27,7 @@ import {
   deleteProduct,
   markOutOfStock,
   searchProducts,
+  uploadProducts,
 } from "../api";
 import { sendIndividualEmails, sendGroupEmail } from "../emailSender";
 import * as XLSX from "xlsx";
