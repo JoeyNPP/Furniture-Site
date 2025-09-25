@@ -377,7 +377,9 @@ async def search_products(query: str, current_user: str = Depends(get_current_us
     products = cur.fetchall()
     cur.close()
     conn.close()
-    return {"products": products}@app.post("/products/import")
+    return {"products": products}
+
+@app.post("/products/import")
 async def import_products(file: UploadFile = File(...), current_user: str = Depends(get_current_user)):
     contents = await file.read()
     if not contents:
