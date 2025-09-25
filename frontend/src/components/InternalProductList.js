@@ -16,6 +16,10 @@ import {
   useTheme,
   Popover,
   Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import ProductFormDialog from "./ProductFormDialog";
@@ -51,11 +55,39 @@ const InternalProductList = ({ onBack }) => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [customizeDialogOpen, setCustomizeDialogOpen] = useState(false);
   const [menuAnchorEl, setMenuAnchorEl] = useState(null);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkEditField, setBulkEditField] = useState("");
+  const [bulkEditValue, setBulkEditValue] = useState("");
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const timezone = "America/New_York";
+
+  const bulkEditableFields = [
+    { value: "title", label: "Title" },
+    { value: "category", label: "Category" },
+    { value: "vendor", label: "Vendor" },
+    { value: "vendor_id", label: "Vendor ID" },
+    { value: "lead_time", label: "Lead Time" },
+    { value: "exp_date", label: "Expiration Date" },
+    { value: "fob", label: "FOB" },
+    { value: "price", label: "Price" },
+    { value: "cost", label: "Cost" },
+    { value: "moq", label: "MOQ" },
+    { value: "qty", label: "Quantity" },
+    { value: "sales_per_month", label: "Sales Per Month" },
+    { value: "net", label: "Net" },
+    { value: "offer_date", label: "Offer Date" },
+    { value: "amazon_url", label: "Amazon URL" },
+    { value: "walmart_url", label: "Walmart URL" },
+    { value: "ebay_url", label: "eBay URL" },
+    { value: "image_url", label: "Image URL" },
+  ];
+
+  const integerFields = new Set(["moq", "qty", "sales_per_month"]);
+  const decimalFields = new Set(["price", "cost", "net"]);
 
   const menuOpen = Boolean(menuAnchorEl);
 
@@ -222,7 +254,7 @@ const InternalProductList = ({ onBack }) => {
   };
 
   const handleSelectionModelChange = (newSelection) => {
-    setSelectedIds(newSelection);
+    setSelectedIds(newSelection.map(String));
   };
 
   const handleSendIndividualEmails = async () => {
@@ -247,6 +279,120 @@ const InternalProductList = ({ onBack }) => {
     }
     await sendGroupEmail(selectedProducts);
     loadProducts();
+  };
+
+  const handleBulkEditOpen = () => {
+    if (!selectedIds.length) {
+      alert("Select at least one product to edit.");
+      return;
+    }
+    setBulkEditField("");
+    setBulkEditValue("");
+    setBulkEditOpen(true);
+  };
+
+  const handleBulkEditClose = () => {
+    if (bulkActionLoading) {
+      return;
+    }
+    setBulkEditOpen(false);
+    setBulkEditField("");
+    setBulkEditValue("");
+  };
+
+  const transformBulkValue = (field, inputValue) => {
+    const normalized = (inputValue ?? "").trim();
+    if (normalized === "") {
+      return null;
+    }
+    if (decimalFields.has(field)) {
+      const parsed = parseFloat(normalized);
+      if (Number.isNaN(parsed)) {
+        throw new Error("Please enter a numeric value.");
+      }
+      return parsed;
+    }
+    if (integerFields.has(field)) {
+      const parsed = parseInt(normalized, 10);
+      if (Number.isNaN(parsed)) {
+        throw new Error("Please enter a whole number.");
+      }
+      return parsed;
+    }
+    return normalized;
+  };
+
+  const getBulkInputProps = () => {
+    if (!bulkEditField) {
+      return { type: 'text' };
+    }
+    if (integerFields.has(bulkEditField)) {
+      return { type: 'number', inputProps: { step: 1 } };
+    }
+    if (decimalFields.has(bulkEditField)) {
+      return { type: 'number', inputProps: { step: 'any' } };
+    }
+    if (bulkEditField === 'offer_date') {
+      return { type: 'date' };
+    }
+    return { type: 'text' };
+  };
+
+  const handleBulkEditSubmit = async () => {
+    if (!bulkEditField) {
+      alert("Select a field to update.");
+      return;
+    }
+    let valueToApply;
+    try {
+      valueToApply = transformBulkValue(bulkEditField, bulkEditValue);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    setBulkActionLoading(true);
+    try {
+      await Promise.all(
+        selectedIds.map((id) =>
+          updateProduct(Number(id), { [bulkEditField]: valueToApply })
+        )
+      );
+      alert(`Updated ${selectedIds.length} product${selectedIds.length === 1 ? "" : "s"}.`);
+      setBulkEditOpen(false);
+      setBulkEditField("");
+      setBulkEditValue("");
+      loadProducts();
+    } catch (error) {
+      console.error("Bulk edit error:", error);
+      alert(`Failed to update selected products: ${error.message}`);
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkMarkOutOfStock = async () => {
+    if (!selectedIds.length) {
+      alert("Select at least one product to update.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Mark ${selectedIds.length} selected product${selectedIds.length === 1 ? "" : "s"} out of stock?`
+      )
+    ) {
+      return;
+    }
+    setBulkActionLoading(true);
+    try {
+      await Promise.all(selectedIds.map((id) => markOutOfStock(Number(id))));
+      alert(`Marked ${selectedIds.length} product${selectedIds.length === 1 ? "" : "s"} out of stock.`);
+      loadProducts();
+    } catch (error) {
+      console.error("Bulk mark out of stock error:", error);
+      alert(`Failed to mark selected products out of stock: ${error.message}`);
+    } finally {
+      setBulkActionLoading(false);
+    }
   };
 
   const handleAddClick = () => {
@@ -392,7 +538,7 @@ const InternalProductList = ({ onBack }) => {
       "Exp Date",
       "FOB",
       "Walmart URL",
-      "EBAY URL",
+      "eBay URL",
       "Sales Per Month",
       "Net",
       "ROI (%)"
@@ -598,7 +744,7 @@ const InternalProductList = ({ onBack }) => {
           await handleMarkOutOfStock(params.row.id);
         };
         return (
-          <Stack direction="row" spacing= "1">
+          <Stack direction="row" spacing={1}>
             <Button variant="outlined" size="small" onClick={handleEdit}>
               Edit
             </Button>
@@ -626,7 +772,10 @@ const InternalProductList = ({ onBack }) => {
     },
   ];
 
-  const columns = baseColumns.map((col) => {
+  const columns = [
+    ...baseColumns.filter((col) => col.field === "actions"),
+    ...baseColumns.filter((col) => col.field !== "actions"),
+  ].map((col) => {
     if (col.field === "actions") {
       return {
         ...col,
@@ -698,6 +847,8 @@ const InternalProductList = ({ onBack }) => {
     "Arts, Crafts & Sewing",
     "Camera & Photo",
   ];
+
+  const bulkInputProps = getBulkInputProps();
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -951,6 +1102,38 @@ const InternalProductList = ({ onBack }) => {
               onSortModelChange={handleSortModelChange}
             />
           </div>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1}
+            sx={{ mt: 2 }}
+            alignItems={{ xs: "stretch", sm: "center" }}
+          >
+            <Button
+              variant="contained"
+              color="info"
+              onClick={handleBulkEditOpen}
+              disabled={!selectedIds.length || bulkActionLoading}
+            >
+              Bulk Edit Selected
+            </Button>
+            <Button
+              variant="contained"
+              color="warning"
+              onClick={handleBulkMarkOutOfStock}
+              disabled={!selectedIds.length || bulkActionLoading}
+            >
+              Mark Selected Out of Stock
+            </Button>
+          </Stack>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ mt: 1, display: 'block' }}
+          >
+            {selectedIds.length
+              ? `${selectedIds.length} item${selectedIds.length === 1 ? '' : 's'} selected`
+              : 'No items selected'}
+          </Typography>
         </>
       )}
       <ProductFormDialog
@@ -968,6 +1151,56 @@ const InternalProductList = ({ onBack }) => {
         columnVisibilityModel={columnVisibilityModel}
         onColumnVisibilityChange={handleColumnVisibilityChange}
       />
+      <Dialog
+        open={bulkEditOpen}
+        onClose={handleBulkEditClose}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Bulk Edit Products</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Applying changes to {selectedIds.length} selected product{selectedIds.length === 1 ? '' : 's'}.
+            </Typography>
+            <FormControl fullWidth size="small">
+              <InputLabel>Field</InputLabel>
+              <Select
+                value={bulkEditField}
+                label="Field"
+                onChange={(e) => setBulkEditField(e.target.value)}
+              >
+                {bulkEditableFields.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label={bulkEditField === 'offer_date' ? 'New Date' : 'New Value'}
+              fullWidth
+              value={bulkEditValue}
+              onChange={(e) => setBulkEditValue(e.target.value)}
+              type={bulkInputProps.type}
+              inputProps={bulkInputProps.inputProps}
+              disabled={bulkActionLoading}
+              helperText="Leave blank to clear the value for all selected products."
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleBulkEditClose} disabled={bulkActionLoading}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleBulkEditSubmit}
+            disabled={!bulkEditField || bulkActionLoading}
+          >
+            {bulkActionLoading ? 'Applying...' : 'Apply'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
