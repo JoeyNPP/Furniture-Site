@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { DataGrid } from "@mui/x-data-grid";
 import {
   Box,
-  Drawer,
   Typography,
   Button,
   FormControl,
@@ -12,10 +11,11 @@ import {
   MenuItem,
   Stack,
   TextField,
-  IconButton,
   CircularProgress,
   useMediaQuery,
   useTheme,
+  Popover,
+  Divider,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import ProductFormDialog from "./ProductFormDialog";
@@ -50,13 +50,22 @@ const InternalProductList = ({ onBack }) => {
   const [dialogMode, setDialogMode] = useState("add");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [customizeDialogOpen, setCustomizeDialogOpen] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [menuAnchorEl, setMenuAnchorEl] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const drawerWidth = isMobile ? 150 : 200;
   const timezone = "America/New_York";
+
+  const menuOpen = Boolean(menuAnchorEl);
+
+  const handleMenuOpen = (event) => {
+    setMenuAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
+  };
 
   const handleUploadClick = () => {
     if (fileInputRef.current) {
@@ -698,31 +707,69 @@ const InternalProductList = ({ onBack }) => {
   };
 
   return (
-    <Box sx={{ display: "flex" }}>
-      <Drawer
-        variant={isMobile ? "temporary" : "permanent"}
-        open={isMobile ? drawerOpen : true}
-        onClose={() => setDrawerOpen(false)}
-        sx={{
-          width: drawerWidth,
-          flexShrink: 0,
-          [`& .MuiDrawer-paper`]: {
-            width: drawerWidth,
-            boxSizing: "border-box",
-          },
-        }}
+    <Box sx={{ p: isMobile ? 1 : 2 }}>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={1}
+        alignItems={{ xs: "flex-start", sm: "center" }}
+        justifyContent="space-between"
+        sx={{ mb: 2 }}
       >
-        <Box sx={{ p: 2 }}>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<MenuIcon />}
+          onClick={handleMenuOpen}
+          sx={{ whiteSpace: "nowrap" }}
+        >
+          Filters & Actions
+        </Button>
+        <Typography
+          variant="h4"
+          sx={{
+            flexGrow: 1,
+            textAlign: { xs: "left", sm: "right" },
+          }}
+        >
+          Internal Product List
+        </Typography>
+      </Stack>
+
+      <Popover
+        open={menuOpen}
+        anchorEl={menuAnchorEl}
+        onClose={handleMenuClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        transformOrigin={{ vertical: "top", horizontal: "left" }}
+      >
+        <Box sx={{ p: 2, width: 320, maxWidth: "100%" }}>
           {onBack && (
-            <Button variant="contained" onClick={onBack} sx={{ mb: 2 }}>
+            <Button
+              fullWidth
+              variant="contained"
+              onClick={() => {
+                handleMenuClose();
+                onBack();
+              }}
+              sx={{ mb: 1 }}
+            >
               Back to Public View
             </Button>
           )}
-          <Button variant="contained" color="secondary" onClick={handleLogout} sx={{ mb: 2 }}>
+          <Button
+            fullWidth
+            variant="contained"
+            color="secondary"
+            onClick={() => {
+              handleMenuClose();
+              handleLogout();
+            }}
+            sx={{ mb: 2 }}
+          >
             Logout
           </Button>
-          <Typography variant="h6" gutterBottom>
-            Filters & Actions
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+            Filters
           </Typography>
           <Stack spacing={1} sx={{ mb: 2 }}>
             <FormControl size="small" fullWidth>
@@ -761,92 +808,151 @@ const InternalProductList = ({ onBack }) => {
                 <MenuItem value="out">Out of Stock</MenuItem>
               </Select>
             </FormControl>
-            <Button variant="contained" onClick={applyFilters}>
-              Apply Filters
-            </Button>
-            <Button variant="outlined" onClick={resetFilters}>
-              Reset Filters
-            </Button>
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={() => {
+                  handleMenuClose();
+                  applyFilters();
+                }}
+              >
+                Apply
+              </Button>
+              <Button
+                variant="outlined"
+                fullWidth
+                onClick={() => {
+                  handleMenuClose();
+                  resetFilters();
+                }}
+              >
+                Reset
+              </Button>
+            </Stack>
           </Stack>
+          <Divider sx={{ mb: 2 }} />
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+            Actions
+          </Typography>
           <Stack spacing={1}>
-            <Button variant="contained" onClick={handleAddClick}>
+            <Button
+              variant="contained"
+              onClick={() => {
+                handleMenuClose();
+                handleAddClick();
+              }}
+            >
               Add Product
             </Button>
             <Button
               variant="contained"
               color="info"
-              onClick={() => setCustomizeDialogOpen(true)}
+              onClick={() => {
+                handleMenuClose();
+                setCustomizeDialogOpen(true);
+              }}
             >
               Customize Columns
             </Button>
-            <Button variant="contained" color="secondary" onClick={handleUploadClick} disabled={uploading}>
-              {uploading ? 'Uploading...' : 'Upload CSV'}
+            <Button
+              variant="contained"
+              color="secondary"
+              disabled={uploading}
+              onClick={() => {
+                handleMenuClose();
+                handleUploadClick();
+              }}
+            >
+              {uploading ? "Uploading..." : "Upload CSV"}
             </Button>
-            <Button variant="contained" color="primary" onClick={handleDownloadInventory}>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => {
+                handleMenuClose();
+                handleDownloadInventory();
+              }}
+            >
               Download Inventory
             </Button>
-            <Button variant="contained" color="success" onClick={handleSendIndividualEmails}>
+            <Button
+              variant="contained"
+              color="success"
+              onClick={() => {
+                handleMenuClose();
+                handleSendIndividualEmails();
+              }}
+            >
               Send Individual Emails
             </Button>
-            <Button variant="contained" color="success" onClick={handleSendGroupEmail}>
+            <Button
+              variant="contained"
+              color="success"
+              onClick={() => {
+                handleMenuClose();
+                handleSendGroupEmail();
+              }}
+            >
               Send Group Email
             </Button>
           </Stack>
         </Box>
-        <input
-          type="file"
-          accept=".csv"
-          ref={fileInputRef}
-          style={{ display: 'none' }}
-          onChange={handleFileChange}
-        />
-      </Drawer>
-      <Box component="main" sx={{ flexGrow: 1, p: 1 }}>
-        {loading && (
-          <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
-            <CircularProgress />
-          </Box>
-        )}
-        {!loading && (
-          <>
-            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-              {isMobile && (
-                <IconButton onClick={() => setDrawerOpen(true)} sx={{ mr: 1 }}>
-                  <MenuIcon />
-                </IconButton>
-              )}
-              <Typography variant="h4" sx={{ flexGrow: 1 }}>
-                Internal Product List
-              </Typography>
-            </Box>
-            <TextField
-              label="Search All Fields"
-              variant="outlined"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              fullWidth
-              sx={{ mb: 2 }}
+      </Popover>
+
+      <input
+        type="file"
+        accept=".csv"
+        ref={fileInputRef}
+        style={{ display: "none" }}
+        onChange={handleFileChange}
+      />
+
+      {loading ? (
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            height: "100vh",
+          }}
+        >
+          <CircularProgress />
+        </Box>
+      ) : (
+        <>
+          <TextField
+            label="Search All Fields"
+            variant="outlined"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            fullWidth
+            sx={{ mb: 2 }}
+          />
+          <div
+            style={{
+              height: isMobile ? "calc(100vh - 150px)" : 600,
+              width: "100%",
+            }}
+          >
+            <DataGrid
+              rows={filteredProducts}
+              columns={columns}
+              getRowId={(row) => String(row.id)}
+              checkboxSelection
+              selectionModel={selectedIds}
+              onSelectionModelChange={handleSelectionModelChange}
+              pagination
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+              rowsPerPageOptions={[5, 10, 25, 50, 100]}
+              columnVisibilityModel={columnVisibilityModel}
+              sortModel={sortModel}
+              onSortModelChange={handleSortModelChange}
             />
-            <div style={{ height: isMobile ? "calc(100vh - 150px)" : 600, width: "100%" }}>
-              <DataGrid
-                rows={filteredProducts}
-                columns={columns}
-                getRowId={(row) => String(row.id)}
-                checkboxSelection
-                selectionModel={selectedIds}
-                onSelectionModelChange={handleSelectionModelChange}
-                pagination
-                pageSize={pageSize}
-                onPageSizeChange={setPageSize}
-                rowsPerPageOptions={[5, 10, 25, 50, 100]}
-                columnVisibilityModel={columnVisibilityModel}
-                sortModel={sortModel}
-                onSortModelChange={handleSortModelChange}
-              />
-            </div>
-          </>
-        )}
-      </Box>
+          </div>
+        </>
+      )}
       <ProductFormDialog
         open={dialogOpen}
         mode={dialogMode}
