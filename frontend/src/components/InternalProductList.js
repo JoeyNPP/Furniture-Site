@@ -12,6 +12,10 @@ import {
   Stack,
   TextField,
   CircularProgress,
+  Checkbox,
+  FormGroup,
+  FormControlLabel,
+  Grid,
   useMediaQuery,
   useTheme,
   Popover,
@@ -37,6 +41,9 @@ import { sendIndividualEmails, sendGroupEmail } from "../emailSender";
 import * as XLSX from "xlsx";
 import { jwtDecode } from 'jwt-decode';
 
+const DEFAULT_DOWNLOAD_COLUMNS = ['title', 'amazon_url', 'asin', 'price', 'moq', 'qty', 'upc', 'lead_time', 'fob', 'walmart_url'];
+
+
 const InternalProductList = ({ onBack }) => {
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -59,6 +66,8 @@ const InternalProductList = ({ onBack }) => {
   const [bulkEditField, setBulkEditField] = useState("");
   const [bulkEditValue, setBulkEditValue] = useState("");
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+  const [downloadSelectedColumns, setDownloadSelectedColumns] = useState(DEFAULT_DOWNLOAD_COLUMNS);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const theme = useTheme();
@@ -395,6 +404,125 @@ const InternalProductList = ({ onBack }) => {
     }
   };
 
+  const handleDownloadSelectedOpen = () => {
+    if (!selectedIds.length) {
+      alert('Select at least one product to download.');
+      return;
+    }
+    const sanitized = sanitizeDownloadSelection(
+      downloadSelectedColumns.length ? downloadSelectedColumns : DEFAULT_DOWNLOAD_COLUMNS
+    );
+    setDownloadSelectedColumns(
+      sanitized.length ? sanitized : sanitizeDownloadSelection(DEFAULT_DOWNLOAD_COLUMNS)
+    );
+    setDownloadDialogOpen(true);
+  };
+
+  const handleDownloadSelectedClose = () => {
+    setDownloadDialogOpen(false);
+  };
+
+  const handleDownloadColumnToggle = (field) => {
+    setDownloadSelectedColumns((prev) => {
+      const hasField = prev.includes(field);
+      const updated = hasField ? prev.filter((item) => item !== field) : [...prev, field];
+      return sanitizeDownloadSelection(updated);
+    });
+  };
+
+  const formatDateForTimezone = (value) => {
+    if (!value) {
+      return '';
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value;
+    }
+    return parsed.toLocaleString('en-US', { timeZone: timezone });
+  };
+
+  const getDownloadValue = (product, field) => {
+    switch (field) {
+      case 'customer_cost': {
+        const price = Number(product.price);
+        const moq = Number(product.moq);
+        return !Number.isNaN(price) && !Number.isNaN(moq) ? price * moq : '';
+      }
+      case 'profit_per_moq': {
+        const price = Number(product.price);
+        const cost = Number(product.cost);
+        const moq = Number(product.moq);
+        return !Number.isNaN(price) && !Number.isNaN(cost) && !Number.isNaN(moq)
+          ? (price - cost) * moq
+          : '';
+      }
+      case 'roi': {
+        const net = Number(product.net);
+        const price = Number(product.price);
+        return !Number.isNaN(net) && !Number.isNaN(price) && price !== 0 ? (net / price) * 100 : '';
+      }
+      case 'offer_date':
+        return formatDateForTimezone(product.offer_date);
+      case 'last_sent':
+        return formatDateForTimezone(product.last_sent);
+      case 'exp_date':
+        return product.exp_date ? "'" + product.exp_date : '';
+      case 'out_of_stock':
+        return product.out_of_stock ? 'true' : 'false';
+      default: {
+        const value = product[field];
+        return value ?? '';
+      }
+    }
+  };
+
+  const escapeCsvValue = (value) => {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    const stringValue = String(value);
+    if (
+      stringValue.includes('"') ||
+      stringValue.includes(',') ||
+      stringValue.includes('\n') ||
+      stringValue.includes('\r')
+    ) {
+      return `"${stringValue.replace(/"/g, '""')}"`;
+    }
+    return stringValue;
+  };
+
+  const handleDownloadSelectedSubmit = () => {
+    const columnsToExport = sanitizeDownloadSelection(downloadSelectedColumns);
+    if (!columnsToExport.length) {
+      alert('Select at least one column to download.');
+      return;
+    }
+    const selectedProducts = filteredProducts.filter((p) =>
+      selectedIds.includes(String(p.id))
+    );
+    if (!selectedProducts.length) {
+      alert('No products selected to download.');
+      return;
+    }
+    const headerRow = columnsToExport.map((field) => headerLabelByField.get(field) || field);
+    const dataRows = selectedProducts.map((product) =>
+      columnsToExport.map((field) => escapeCsvValue(getDownloadValue(product, field)))
+    );
+    const csvContent = [headerRow, ...dataRows]
+      .map((row) => row.join(','))
+      .join('\n');
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `selected_products_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setDownloadDialogOpen(false);
+  };
   const handleAddClick = () => {
     setDialogMode("add");
     setSelectedProduct(null);
@@ -725,83 +853,66 @@ const InternalProductList = ({ onBack }) => {
       valueFormatter: (params) =>
         params.value ? `${params.value.toFixed(2)}%` : "",
     },
-    {
-      field: "actions",
-      headerName: "Actions",
-      width: 250,
-      sortable: false,
-      renderCell: (params) => {
-        const handleEdit = (e) => {
-          e.stopPropagation();
-          handleEditClick(params.row);
-        };
-        const handleDeleteClick = async (e) => {
-          e.stopPropagation();
-          await handleDelete(params.row.id);
-        };
-        return (
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{ width: '100%', justifyContent: 'space-between', alignItems: 'center' }}
-          >
-            <Button variant="outlined" size="small" onClick={handleEdit}>
-              Edit
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
-              color="error"
-              onClick={handleDeleteClick}
-            >
-              Delete
-            </Button>
-          </Stack>
-        );
-      },
-    },
   ];
 
-  const columns = [
-    ...baseColumns.filter((col) => col.field === "actions"),
-    ...baseColumns.filter((col) => col.field !== "actions"),
-  ].map((col) => {
-    if (col.field === "actions") {
-      return {
-        ...col,
-        renderCell: (params) => {
-          const handleEdit = (e) => {
-            e.stopPropagation();
-            handleEditClick(params.row);
-          };
-          const handleDeleteClick = async (e) => {
-            e.stopPropagation();
-            await handleDelete(params.row.id);
-          };
-          return (
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{ width: '100%', justifyContent: 'space-between', alignItems: 'center' }}
-            >
-              <Button variant="outlined" size="small" onClick={handleEdit}>
-                Edit
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                color="error"
-                onClick={handleDeleteClick}
-              >
-                Delete
-              </Button>
-            </Stack>
-          );
-        },
+  const editColumn = {
+    field: 'edit',
+    headerName: '',
+    width: 90,
+    sortable: false,
+    filterable: false,
+    disableColumnMenu: true,
+    renderCell: (params) => {
+      const handleEdit = (e) => {
+        e.stopPropagation();
+        handleEditClick(params.row);
       };
-    }
-    return col;
-  });
+      return (
+        <Button variant="outlined" size="small" onClick={handleEdit}>
+          Edit
+        </Button>
+      );
+    },
+  };
+
+  const deleteColumn = {
+    field: 'delete',
+    headerName: '',
+    width: 100,
+    sortable: false,
+    filterable: false,
+    disableColumnMenu: true,
+    align: 'right',
+    headerAlign: 'right',
+    renderCell: (params) => {
+      const handleDeleteClick = async (e) => {
+        e.stopPropagation();
+        await handleDelete(params.row.id);
+      };
+      return (
+        <Button
+          variant="outlined"
+          size="small"
+          color="error"
+          onClick={handleDeleteClick}
+        >
+          Delete
+        </Button>
+      );
+    },
+  };
+
+  const columns = [editColumn, ...baseColumns, deleteColumn];
+
+  const downloadableColumnOptions = baseColumns.map((col) => ({
+    field: col.field,
+    label: col.headerName || col.field,
+  }));
+  const columnFieldOrder = downloadableColumnOptions.map((option) => option.field);
+  const headerLabelByField = new Map(downloadableColumnOptions.map((option) => [option.field, option.label]));
+
+  const sanitizeDownloadSelection = (fields) =>
+    columnFieldOrder.filter((field) => fields.includes(field));
 
   const allCategories = [
     "Appliances",
@@ -1104,6 +1215,14 @@ const InternalProductList = ({ onBack }) => {
             >
               Mark Selected Out of Stock
             </Button>
+            <Button
+              variant="contained"
+              color="secondary"
+              onClick={handleDownloadSelectedOpen}
+              disabled={!selectedIds.length || bulkActionLoading}
+            >
+              Download Selected
+            </Button>
           </Stack>
           <Typography
             variant="caption"
@@ -1178,6 +1297,47 @@ const InternalProductList = ({ onBack }) => {
             disabled={!bulkEditField || bulkActionLoading}
           >
             {bulkActionLoading ? 'Applying...' : 'Apply'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={downloadDialogOpen}
+        onClose={handleDownloadSelectedClose}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>Download Selected Products</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Choose which columns to include for the {selectedIds.length} selected product{selectedIds.length === 1 ? '' : 's'}.
+            </Typography>
+            <FormGroup>
+              <Grid container spacing={1}>
+                {downloadableColumnOptions.map((option) => (
+                  <Grid item xs={12} sm={6} md={4} key={option.field}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={downloadSelectedColumns.includes(option.field)}
+                          onChange={() => handleDownloadColumnToggle(option.field)}
+                        />
+                      }
+                      label={option.label}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </FormGroup>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDownloadSelectedClose}>Cancel</Button>
+          <Button
+            onClick={handleDownloadSelectedSubmit}
+            disabled={!sanitizeDownloadSelection(downloadSelectedColumns).length}
+          >
+            Download CSV
           </Button>
         </DialogActions>
       </Dialog>
