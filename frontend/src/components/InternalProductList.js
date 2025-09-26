@@ -739,12 +739,12 @@ const InternalProductList = ({ onBack }) => {
           e.stopPropagation();
           await handleDelete(params.row.id);
         };
-        const handleMarkOut = async (e) => {
-          e.stopPropagation();
-          await handleMarkOutOfStock(params.row.id);
-        };
         return (
-          <Stack direction="row" spacing={1}>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ width: '100%', justifyContent: 'space-between', alignItems: 'center' }}
+          >
             <Button variant="outlined" size="small" onClick={handleEdit}>
               Edit
             </Button>
@@ -756,16 +756,6 @@ const InternalProductList = ({ onBack }) => {
             >
               Delete
             </Button>
-            {!params.row.out_of_stock && (
-              <Button
-                variant="outlined"
-                size="small"
-                color="warning"
-                onClick={handleMarkOut}
-              >
-                Out of Stock
-              </Button>
-            )}
           </Stack>
         );
       },
@@ -788,12 +778,12 @@ const InternalProductList = ({ onBack }) => {
             e.stopPropagation();
             await handleDelete(params.row.id);
           };
-          const handleMarkOut = async (e) => {
-            e.stopPropagation();
-            await handleMarkOutOfStock(params.row.id);
-          };
           return (
-            <Stack direction="row" spacing={1}>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ width: '100%', justifyContent: 'space-between', alignItems: 'center' }}
+            >
               <Button variant="outlined" size="small" onClick={handleEdit}>
                 Edit
               </Button>
@@ -805,16 +795,6 @@ const InternalProductList = ({ onBack }) => {
               >
                 Delete
               </Button>
-              {!params.row.out_of_stock && (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  color="warning"
-                  onClick={handleMarkOut}
-                >
-                  Out of Stock
-                </Button>
-              )}
             </Stack>
           );
         },
@@ -1206,3 +1186,4 @@ const InternalProductList = ({ onBack }) => {
 };
 
 export default InternalProductList;
+
