@@ -14,6 +14,7 @@ import jwt
 import bcrypt
 
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -79,6 +80,12 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
             password TEXT NOT NULL
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS user_settings (
+            username TEXT PRIMARY KEY,
+            settings JSONB NOT NULL DEFAULT '{"theme": "light", "textScale": 1.0, "columnVisibility": {"title": true, "price": true}}'
         )
     """)
     # Ensure default users exist with shared credentials
@@ -160,6 +167,11 @@ class ProductUpdate(BaseModel):
     last_sent: Optional[datetime] = None
     sales_per_month: Optional[int] = None
     net: Optional[float] = None
+
+class UserSettings(BaseModel):
+    theme: Optional[str] = "light"
+    textScale: Optional[float] = 1.0
+    columnVisibility: Optional[dict] = {"title": True, "price": True}
 
 # Authentication
 def verify_password(plain_password, hashed_password):
@@ -393,7 +405,6 @@ async def import_products(file: UploadFile = File(...), current_user: str = Depe
     reader = csv.DictReader(io.StringIO(text))
     if reader.fieldnames is None:
         raise HTTPException(status_code=400, detail="CSV file is missing headers")
-
     field_map = {
         "date": "offer_date",
         "amazon url": "amazon_url",
@@ -418,21 +429,17 @@ async def import_products(file: UploadFile = File(...), current_user: str = Depe
     }
     float_fields = {"price", "cost", "net", "sales_per_month"}
     int_fields = {"moq", "qty"}
-
     conn = get_db_connection()
     cur = conn.cursor()
     inserted = updated = skipped = 0
-
     for raw_row in reader:
         row = {(key or "").strip(): (value or "").strip() for key, value in raw_row.items()}
         normalized = {key.lower(): value for key, value in row.items() if key}
-
         asin_value = normalized.get("asin") or None
         title_value = normalized.get("title") or None
         if not asin_value and not title_value:
             skipped += 1
             continue
-
         record = {}
         for header, column in field_map.items():
             value = normalized.get(header)
@@ -460,7 +467,6 @@ async def import_products(file: UploadFile = File(...), current_user: str = Depe
                     record[column] = parsed
             else:
                 record[column] = value
-
         product_id = None
         if asin_value:
             cur.execute("SELECT id FROM products WHERE asin = %s", (asin_value,))
@@ -472,7 +478,6 @@ async def import_products(file: UploadFile = File(...), current_user: str = Depe
             match = cur.fetchone()
             if match:
                 product_id = match["id"]
-
         if product_id:
             if record:
                 update_fields = []
@@ -503,9 +508,48 @@ async def import_products(file: UploadFile = File(...), current_user: str = Depe
                 inserted += 1
             else:
                 skipped += 1
-
     conn.commit()
     cur.close()
     conn.close()
-
     return {"inserted": inserted, "updated": updated, "skipped": skipped}
+
+class UserSettings(BaseModel):
+    theme: Optional[str] = "light"
+    textScale: Optional[float] = 1.0
+    columnVisibility: Optional[dict] = {"title": True, "price": True}
+
+@app.get("/user/settings")
+async def get_user_settings(current_user: str = Depends(get_current_user)):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT settings FROM user_settings WHERE username = %s", (current_user,))
+    settings = cur.fetchone()
+    cur.close()
+    conn.close()
+    if settings and "settings" in settings:
+        return settings["settings"]
+    return {"theme": "light", "textScale": 1.0, "columnVisibility": {"title": True, "price": True}}
+
+@app.patch("/user/settings")
+async def update_user_settings(settings: UserSettings, current_user: str = Depends(get_current_user)):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO user_settings (username, settings)
+        VALUES (%s, %s)
+        ON CONFLICT (username) DO UPDATE SET settings = EXCLUDED.settings
+    """, (current_user, settings.dict()))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": "Settings updated", "settings": settings.dict()}
+
+@app.post("/user/settings")
+async def create_user_settings(settings: UserSettings, current_user: str = Depends(get_current_user)):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO user_settings (username, settings) VALUES (%s, %s) ON CONFLICT (username) DO NOTHING", (current_user, settings.dict()))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": "Settings created", "settings": settings.dict()}
