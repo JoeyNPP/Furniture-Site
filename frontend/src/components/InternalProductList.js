@@ -19,6 +19,7 @@ import {
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import SettingsDialog from "./SettingsDialog";
+import ProductFormDialog from "./ProductFormDialog";
 import CustomizeColumnsDialog from "./CustomizeColumnsDialog";
 import { fetchProducts, createProduct, updateProduct, deleteProduct, markOutOfStock, searchProducts, uploadProducts } from "../api";
 import { sendIndividualEmails, sendGroupEmail } from "../emailSender";
