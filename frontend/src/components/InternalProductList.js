@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { DataGrid } from "@mui/x-data-grid";
 import {
   Box,
+  Drawer,
   Typography,
   Button,
   FormControl,
@@ -11,42 +12,23 @@ import {
   MenuItem,
   Stack,
   TextField,
+  IconButton,
   CircularProgress,
-  Checkbox,
-  FormGroup,
-  FormControlLabel,
-  Grid,
   useMediaQuery,
   useTheme,
-  Popover,
-  Divider,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
-import ProductFormDialog from "./ProductFormDialog";
+import SettingsDialog from "./SettingsDialog";
 import CustomizeColumnsDialog from "./CustomizeColumnsDialog";
-import {
-  fetchProducts,
-  createProduct,
-  updateProduct,
-  deleteProduct,
-  markOutOfStock,
-  searchProducts,
-  uploadProducts,
-} from "../api";
+import { fetchProducts, createProduct, updateProduct, deleteProduct, markOutOfStock, searchProducts, uploadProducts } from "../api";
 import { sendIndividualEmails, sendGroupEmail } from "../emailSender";
 import * as XLSX from "xlsx";
-import { jwtDecode } from 'jwt-decode';
-
-const DEFAULT_DOWNLOAD_COLUMNS = ['title', 'amazon_url', 'asin', 'price', 'moq', 'qty', 'upc', 'lead_time', 'fob', 'walmart_url'];
-
+import { jwtDecode } from "jwt-decode";
+import { SettingsContext } from "../settings/SettingsContext";
 
 const InternalProductList = ({ onBack }) => {
   const fileInputRef = useRef(null);
-  const [uploading, setUploading] = useState(false);
+  const { settings, updateSettings } = useContext(SettingsContext);
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -55,58 +37,21 @@ const InternalProductList = ({ onBack }) => {
   const [vendorFilter, setVendorFilter] = useState("");
   const [stockFilter, setStockFilter] = useState("in");
   const [pageSize, setPageSize] = useState(50);
-  const [columnVisibilityModel, setColumnVisibilityModel] = useState({});
+  const [columnVisibilityModel, setColumnVisibilityModel] = useState(settings.columnVisibility || {});
   const [sortModel, setSortModel] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState("add");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [customizeDialogOpen, setCustomizeDialogOpen] = useState(false);
-  const [menuAnchorEl, setMenuAnchorEl] = useState(null);
-  const [bulkEditOpen, setBulkEditOpen] = useState(false);
-  const [bulkEditField, setBulkEditField] = useState("");
-  const [bulkEditValue, setBulkEditValue] = useState("");
-  const [bulkActionLoading, setBulkActionLoading] = useState(false);
-  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
-  const [downloadSelectedColumns, setDownloadSelectedColumns] = useState(DEFAULT_DOWNLOAD_COLUMNS);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const drawerWidth = isMobile ? 150 : 200;
   const timezone = "America/New_York";
-
-  const bulkEditableFields = [
-    { value: "title", label: "Title" },
-    { value: "category", label: "Category" },
-    { value: "vendor", label: "Vendor" },
-    { value: "vendor_id", label: "Vendor ID" },
-    { value: "lead_time", label: "Lead Time" },
-    { value: "exp_date", label: "Expiration Date" },
-    { value: "fob", label: "FOB" },
-    { value: "price", label: "Price" },
-    { value: "cost", label: "Cost" },
-    { value: "moq", label: "MOQ" },
-    { value: "qty", label: "Quantity" },
-    { value: "sales_per_month", label: "Sales Per Month" },
-    { value: "net", label: "Net" },
-    { value: "offer_date", label: "Offer Date" },
-    { value: "amazon_url", label: "Amazon URL" },
-    { value: "walmart_url", label: "Walmart URL" },
-    { value: "ebay_url", label: "eBay URL" },
-    { value: "image_url", label: "Image URL" },
-  ];
-
-  const integerFields = new Set(["moq", "qty", "sales_per_month"]);
-  const decimalFields = new Set(["price", "cost", "net"]);
-
-  const menuOpen = Boolean(menuAnchorEl);
-
-  const handleMenuOpen = (event) => {
-    setMenuAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setMenuAnchorEl(null);
-  };
 
   const handleUploadClick = () => {
     if (fileInputRef.current) {
@@ -117,9 +62,7 @@ const InternalProductList = ({ onBack }) => {
 
   const handleFileChange = async (event) => {
     const file = event.target.files && event.target.files[0];
-    if (!file) {
-      return;
-    }
+    if (!file) return;
     setUploading(true);
     try {
       const result = await uploadProducts(file);
@@ -132,7 +75,6 @@ const InternalProductList = ({ onBack }) => {
       setUploading(false);
     }
   };
-
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -177,9 +119,9 @@ const InternalProductList = ({ onBack }) => {
     baseColumns.forEach((col) => {
       defaultModel[col.field] = true;
     });
-    setColumnVisibilityModel(defaultModel);
-    localStorage.setItem("columnVisibilityModel", JSON.stringify(defaultModel));
-  }, []);
+    setColumnVisibilityModel(settings.columnVisibility || defaultModel);
+    localStorage.setItem("columnVisibilityModel", JSON.stringify(settings.columnVisibility || defaultModel));
+  }, [settings.columnVisibility]);
 
   async function loadProducts() {
     setLoading(true);
@@ -217,8 +159,11 @@ const InternalProductList = ({ onBack }) => {
     } else {
       const lowerQuery = searchQuery.toLowerCase();
       const searchedProducts = products.filter((product) =>
-        Object.values(product).some((value) =>
-          value !== null && value !== undefined && value.toString().toLowerCase().includes(lowerQuery)
+        Object.values(product).some(
+          (value) =>
+            value !== null &&
+            value !== undefined &&
+            value.toString().toLowerCase().includes(lowerQuery)
         )
       );
       setFilteredProducts(searchedProducts);
@@ -227,6 +172,7 @@ const InternalProductList = ({ onBack }) => {
 
   const handleColumnVisibilityChange = (newModel) => {
     setColumnVisibilityModel(newModel);
+    updateSettings({ ...settings, columnVisibility: newModel });
     localStorage.setItem("columnVisibilityModel", JSON.stringify(newModel));
   };
 
@@ -263,7 +209,7 @@ const InternalProductList = ({ onBack }) => {
   };
 
   const handleSelectionModelChange = (newSelection) => {
-    setSelectedIds(newSelection.map(String));
+    setSelectedIds(newSelection);
   };
 
   const handleSendIndividualEmails = async () => {
@@ -290,239 +236,6 @@ const InternalProductList = ({ onBack }) => {
     loadProducts();
   };
 
-  const handleBulkEditOpen = () => {
-    if (!selectedIds.length) {
-      alert("Select at least one product to edit.");
-      return;
-    }
-    setBulkEditField("");
-    setBulkEditValue("");
-    setBulkEditOpen(true);
-  };
-
-  const handleBulkEditClose = () => {
-    if (bulkActionLoading) {
-      return;
-    }
-    setBulkEditOpen(false);
-    setBulkEditField("");
-    setBulkEditValue("");
-  };
-
-  const transformBulkValue = (field, inputValue) => {
-    const normalized = (inputValue ?? "").trim();
-    if (normalized === "") {
-      return null;
-    }
-    if (decimalFields.has(field)) {
-      const parsed = parseFloat(normalized);
-      if (Number.isNaN(parsed)) {
-        throw new Error("Please enter a numeric value.");
-      }
-      return parsed;
-    }
-    if (integerFields.has(field)) {
-      const parsed = parseInt(normalized, 10);
-      if (Number.isNaN(parsed)) {
-        throw new Error("Please enter a whole number.");
-      }
-      return parsed;
-    }
-    return normalized;
-  };
-
-  const getBulkInputProps = () => {
-    if (!bulkEditField) {
-      return { type: 'text' };
-    }
-    if (integerFields.has(bulkEditField)) {
-      return { type: 'number', inputProps: { step: 1 } };
-    }
-    if (decimalFields.has(bulkEditField)) {
-      return { type: 'number', inputProps: { step: 'any' } };
-    }
-    if (bulkEditField === 'offer_date') {
-      return { type: 'date' };
-    }
-    return { type: 'text' };
-  };
-
-  const handleBulkEditSubmit = async () => {
-    if (!bulkEditField) {
-      alert("Select a field to update.");
-      return;
-    }
-    let valueToApply;
-    try {
-      valueToApply = transformBulkValue(bulkEditField, bulkEditValue);
-    } catch (error) {
-      alert(error.message);
-      return;
-    }
-    setBulkActionLoading(true);
-    try {
-      await Promise.all(
-        selectedIds.map((id) =>
-          updateProduct(Number(id), { [bulkEditField]: valueToApply })
-        )
-      );
-      alert(`Updated ${selectedIds.length} product${selectedIds.length === 1 ? "" : "s"}.`);
-      setBulkEditOpen(false);
-      setBulkEditField("");
-      setBulkEditValue("");
-      loadProducts();
-    } catch (error) {
-      console.error("Bulk edit error:", error);
-      alert(`Failed to update selected products: ${error.message}`);
-    } finally {
-      setBulkActionLoading(false);
-    }
-  };
-
-  const handleBulkMarkOutOfStock = async () => {
-    if (!selectedIds.length) {
-      alert("Select at least one product to update.");
-      return;
-    }
-    if (
-      !window.confirm(
-        `Mark ${selectedIds.length} selected product${selectedIds.length === 1 ? "" : "s"} out of stock?`
-      )
-    ) {
-      return;
-    }
-    setBulkActionLoading(true);
-    try {
-      await Promise.all(selectedIds.map((id) => markOutOfStock(Number(id))));
-      alert(`Marked ${selectedIds.length} product${selectedIds.length === 1 ? "" : "s"} out of stock.`);
-      loadProducts();
-    } catch (error) {
-      console.error("Bulk mark out of stock error:", error);
-      alert(`Failed to mark selected products out of stock: ${error.message}`);
-    } finally {
-      setBulkActionLoading(false);
-    }
-  };
-
-  const handleDownloadSelectedOpen = () => {
-    if (!selectedIds.length) {
-      alert('Select at least one product to download.');
-      return;
-    }
-    const sanitized = sanitizeDownloadSelection(
-      downloadSelectedColumns.length ? downloadSelectedColumns : DEFAULT_DOWNLOAD_COLUMNS
-    );
-    setDownloadSelectedColumns(
-      sanitized.length ? sanitized : sanitizeDownloadSelection(DEFAULT_DOWNLOAD_COLUMNS)
-    );
-    setDownloadDialogOpen(true);
-  };
-
-  const handleDownloadSelectedClose = () => {
-    setDownloadDialogOpen(false);
-  };
-
-  const handleDownloadColumnToggle = (field) => {
-    setDownloadSelectedColumns((prev) => {
-      const hasField = prev.includes(field);
-      const updated = hasField ? prev.filter((item) => item !== field) : [...prev, field];
-      return sanitizeDownloadSelection(updated);
-    });
-  };
-
-  const formatDateForTimezone = (value) => {
-    if (!value) {
-      return '';
-    }
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-      return value;
-    }
-    return parsed.toLocaleString('en-US', { timeZone: timezone });
-  };
-
-  const getDownloadValue = (product, field) => {
-    switch (field) {
-      case 'customer_cost': {
-        const price = Number(product.price);
-        const moq = Number(product.moq);
-        return !Number.isNaN(price) && !Number.isNaN(moq) ? price * moq : '';
-      }
-      case 'profit_per_moq': {
-        const price = Number(product.price);
-        const cost = Number(product.cost);
-        const moq = Number(product.moq);
-        return !Number.isNaN(price) && !Number.isNaN(cost) && !Number.isNaN(moq)
-          ? (price - cost) * moq
-          : '';
-      }
-      case 'roi': {
-        const net = Number(product.net);
-        const price = Number(product.price);
-        return !Number.isNaN(net) && !Number.isNaN(price) && price !== 0 ? (net / price) * 100 : '';
-      }
-      case 'offer_date':
-        return formatDateForTimezone(product.offer_date);
-      case 'last_sent':
-        return formatDateForTimezone(product.last_sent);
-      case 'exp_date':
-        return product.exp_date ? "'" + product.exp_date : '';
-      case 'out_of_stock':
-        return product.out_of_stock ? 'true' : 'false';
-      default: {
-        const value = product[field];
-        return value ?? '';
-      }
-    }
-  };
-
-  const escapeCsvValue = (value) => {
-    if (value === null || value === undefined) {
-      return '';
-    }
-    const stringValue = String(value);
-    if (
-      stringValue.includes('"') ||
-      stringValue.includes(',') ||
-      stringValue.includes('\n') ||
-      stringValue.includes('\r')
-    ) {
-      return `"${stringValue.replace(/"/g, '""')}"`;
-    }
-    return stringValue;
-  };
-
-  const handleDownloadSelectedSubmit = () => {
-    const columnsToExport = sanitizeDownloadSelection(downloadSelectedColumns);
-    if (!columnsToExport.length) {
-      alert('Select at least one column to download.');
-      return;
-    }
-    const selectedProducts = filteredProducts.filter((p) =>
-      selectedIds.includes(String(p.id))
-    );
-    if (!selectedProducts.length) {
-      alert('No products selected to download.');
-      return;
-    }
-    const headerRow = columnsToExport.map((field) => headerLabelByField.get(field) || field);
-    const dataRows = selectedProducts.map((product) =>
-      columnsToExport.map((field) => escapeCsvValue(getDownloadValue(product, field)))
-    );
-    const csvContent = [headerRow, ...dataRows]
-      .map((row) => row.join(','))
-      .join('\n');
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `selected_products_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setDownloadDialogOpen(false);
-  };
   const handleAddClick = () => {
     setDialogMode("add");
     setSelectedProduct(null);
@@ -666,7 +379,7 @@ const InternalProductList = ({ onBack }) => {
       "Exp Date",
       "FOB",
       "Walmart URL",
-      "eBay URL",
+      "EBAY URL",
       "Sales Per Month",
       "Net",
       "ROI (%)"
@@ -762,28 +475,28 @@ const InternalProductList = ({ onBack }) => {
   };
 
   const baseColumns = [
-    { field: "title", headerName: "Title", width: 200 },
-    { field: "category", headerName: "Category", width: 200 },
-    { field: "vendor_id", headerName: "Vendor ID", width: 120 },
-    { field: "vendor", headerName: "Vendor", width: 150 },
-    { field: "price", headerName: "Price", width: 100, type: "number" },
-    { field: "cost", headerName: "Cost", width: 100, type: "number" },
-    { field: "moq", headerName: "MOQ", width: 100, type: "number" },
-    { field: "qty", headerName: "Qty", width: 100, type: "number" },
-    { field: "upc", headerName: "UPC", width: 120 },
-    { field: "asin", headerName: "ASIN", width: 120 },
-    { field: "lead_time", headerName: "Lead Time", width: 120 },
-    { field: "exp_date", headerName: "Exp Date", width: 120 },
-    { field: "fob", headerName: "FOB", width: 100 },
-    { field: "image_url", headerName: "Image URL", width: 200 },
-    { field: "out_of_stock", headerName: "Out of Stock", width: 110, type: "boolean" },
-    { field: "amazon_url", headerName: "Amazon URL", width: 200 },
-    { field: "walmart_url", headerName: "Walmart URL", width: 200 },
-    { field: "ebay_url", headerName: "eBay URL", width: 200 },
+    { field: "title", headerName: "Title", width: 200 * (settings.textScale || 1) },
+    { field: "category", headerName: "Category", width: 200 * (settings.textScale || 1) },
+    { field: "vendor_id", headerName: "Vendor ID", width: 120 * (settings.textScale || 1) },
+    { field: "vendor", headerName: "Vendor", width: 150 * (settings.textScale || 1) },
+    { field: "price", headerName: "Price", width: 100 * (settings.textScale || 1), type: "number" },
+    { field: "cost", headerName: "Cost", width: 100 * (settings.textScale || 1), type: "number" },
+    { field: "moq", headerName: "MOQ", width: 100 * (settings.textScale || 1), type: "number" },
+    { field: "qty", headerName: "Qty", width: 100 * (settings.textScale || 1), type: "number" },
+    { field: "upc", headerName: "UPC", width: 120 * (settings.textScale || 1) },
+    { field: "asin", headerName: "ASIN", width: 120 * (settings.textScale || 1) },
+    { field: "lead_time", headerName: "Lead Time", width: 120 * (settings.textScale || 1) },
+    { field: "exp_date", headerName: "Exp Date", width: 120 * (settings.textScale || 1) },
+    { field: "fob", headerName: "FOB", width: 100 * (settings.textScale || 1) },
+    { field: "image_url", headerName: "Image URL", width: 200 * (settings.textScale || 1) },
+    { field: "out_of_stock", headerName: "Out of Stock", width: 110 * (settings.textScale || 1), type: "boolean" },
+    { field: "amazon_url", headerName: "Amazon URL", width: 200 * (settings.textScale || 1) },
+    { field: "walmart_url", headerName: "Walmart URL", width: 200 * (settings.textScale || 1) },
+    { field: "ebay_url", headerName: "eBay URL", width: 200 * (settings.textScale || 1) },
     {
       field: "offer_date",
       headerName: "Offer Date",
-      width: 180,
+      width: 180 * (settings.textScale || 1),
       valueFormatter: (params) =>
         params.value
           ? new Date(params.value).toLocaleString('en-US', { timeZone: timezone })
@@ -792,7 +505,7 @@ const InternalProductList = ({ onBack }) => {
     {
       field: "last_sent",
       headerName: "Last Sent",
-      width: 180,
+      width: 180 * (settings.textScale || 1),
       valueFormatter: (params) =>
         params.value
           ? new Date(params.value).toLocaleString('en-US', { timeZone: timezone })
@@ -801,7 +514,7 @@ const InternalProductList = ({ onBack }) => {
     {
       field: "customer_cost",
       headerName: "Customer Cost per MOQ",
-      width: 180,
+      width: 180 * (settings.textScale || 1),
       valueGetter: (params) => {
         const price = Number(params.row.price);
         const moq = Number(params.row.moq);
@@ -814,7 +527,7 @@ const InternalProductList = ({ onBack }) => {
     {
       field: "profit_per_moq",
       headerName: "Profit per MOQ",
-      width: 180,
+      width: 180 * (settings.textScale || 1),
       valueGetter: (params) => {
         const price = Number(params.row.price);
         const cost = Number(params.row.cost);
@@ -828,19 +541,19 @@ const InternalProductList = ({ onBack }) => {
     {
       field: "sales_per_month",
       headerName: "Sales Per Month",
-      width: 150,
+      width: 150 * (settings.textScale || 1),
       type: "number",
     },
     {
       field: "net",
       headerName: "Net",
-      width: 150,
+      width: 150 * (settings.textScale || 1),
       type: "number",
     },
     {
       field: "roi",
       headerName: "ROI (%)",
-      width: 150,
+      width: 150 * (settings.textScale || 1),
       type: "number",
       valueGetter: (params) => {
         const net = Number(params.row.net);
@@ -850,69 +563,102 @@ const InternalProductList = ({ onBack }) => {
         }
         return "";
       },
-      valueFormatter: (params) =>
-        params.value ? `${params.value.toFixed(2)}%` : "",
+      valueFormatter: (params) => (params.value ? `${params.value.toFixed(2)}%` : ""),
+    },
+    {
+      field: "actions",
+      headerName: "Actions",
+      width: 250 * (settings.textScale || 1),
+      sortable: false,
+      renderCell: (params) => {
+        const handleEdit = (e) => {
+          e.stopPropagation();
+          handleEditClick(params.row);
+        };
+        const handleDeleteClick = async (e) => {
+          e.stopPropagation();
+          await handleDelete(params.row.id);
+        };
+        const handleMarkOut = async (e) => {
+          e.stopPropagation();
+          await handleMarkOutOfStock(params.row.id);
+        };
+        return (
+          <Stack direction="row" spacing={1}>
+            <Button variant="outlined" size="small" onClick={handleEdit}>
+              Edit
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              color="error"
+              onClick={handleDeleteClick}
+            >
+              Delete
+            </Button>
+            {!params.row.out_of_stock && (
+              <Button
+                variant="outlined"
+                size="small"
+                color="warning"
+                onClick={handleMarkOut}
+              >
+                Out of Stock
+              </Button>
+            )}
+          </Stack>
+        );
+      },
     },
   ];
 
-  const editColumn = {
-    field: 'edit',
-    headerName: '',
-    width: 90,
-    sortable: false,
-    filterable: false,
-    disableColumnMenu: true,
-    renderCell: (params) => {
-      const handleEdit = (e) => {
-        e.stopPropagation();
-        handleEditClick(params.row);
+  const columns = baseColumns.map((col) => {
+    if (col.field === "actions") {
+      return {
+        ...col,
+        renderCell: (params) => {
+          const handleEdit = (e) => {
+            e.stopPropagation();
+            handleEditClick(params.row);
+          };
+          const handleDeleteClick = async (e) => {
+            e.stopPropagation();
+            await handleDelete(params.row.id);
+          };
+          const handleMarkOut = async (e) => {
+            e.stopPropagation();
+            await handleMarkOutOfStock(params.row.id);
+          };
+          return (
+            <Stack direction="row" spacing={1}>
+              <Button variant="outlined" size="small" onClick={handleEdit}>
+                Edit
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                color="error"
+                onClick={handleDeleteClick}
+              >
+                Delete
+              </Button>
+              {!params.row.out_of_stock && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  color="warning"
+                  onClick={handleMarkOut}
+                >
+                  Out of Stock
+                </Button>
+              )}
+            </Stack>
+          );
+        },
       };
-      return (
-        <Button variant="outlined" size="small" onClick={handleEdit}>
-          Edit
-        </Button>
-      );
-    },
-  };
-
-  const deleteColumn = {
-    field: 'delete',
-    headerName: '',
-    width: 100,
-    sortable: false,
-    filterable: false,
-    disableColumnMenu: true,
-    align: 'right',
-    headerAlign: 'right',
-    renderCell: (params) => {
-      const handleDeleteClick = async (e) => {
-        e.stopPropagation();
-        await handleDelete(params.row.id);
-      };
-      return (
-        <Button
-          variant="outlined"
-          size="small"
-          color="error"
-          onClick={handleDeleteClick}
-        >
-          Delete
-        </Button>
-      );
-    },
-  };
-
-  const columns = [editColumn, ...baseColumns, deleteColumn];
-
-  const downloadableColumnOptions = baseColumns.map((col) => ({
-    field: col.field,
-    label: col.headerName || col.field,
-  }));
-  const columnFieldOrder = downloadableColumnOptions.map((option) => option.field);
-  const headerLabelByField = new Map(downloadableColumnOptions.map((option) => [option.field, option.label]));
-
-  const sanitizeDownloadSelection = (fields) =>
-    columnFieldOrder.filter((field) => fields.includes(field));
+    }
+    return { ...col, width: col.width };
+  });
 
   const allCategories = [
     "Appliances",
@@ -939,8 +685,6 @@ const InternalProductList = ({ onBack }) => {
     "Camera & Photo",
   ];
 
-  const bulkInputProps = getBulkInputProps();
-
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("tokenExpiration");
@@ -949,69 +693,31 @@ const InternalProductList = ({ onBack }) => {
   };
 
   return (
-    <Box sx={{ p: isMobile ? 1 : 2 }}>
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        spacing={1}
-        alignItems={{ xs: "flex-start", sm: "center" }}
-        justifyContent="space-between"
-        sx={{ mb: 2 }}
+    <Box sx={{ display: "flex" }}>
+      <Drawer
+        variant={isMobile ? "temporary" : "permanent"}
+        open={isMobile ? drawerOpen : true}
+        onClose={() => setDrawerOpen(false)}
+        sx={{
+          width: drawerWidth,
+          flexShrink: 0,
+          "& .MuiDrawer-paper": {
+            width: drawerWidth,
+            boxSizing: "border-box",
+          },
+        }}
       >
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<MenuIcon />}
-          onClick={handleMenuOpen}
-          sx={{ whiteSpace: "nowrap" }}
-        >
-          Filters & Actions
-        </Button>
-        <Typography
-          variant="h4"
-          sx={{
-            flexGrow: 1,
-            textAlign: { xs: "left", sm: "right" },
-          }}
-        >
-          Internal Product List
-        </Typography>
-      </Stack>
-
-      <Popover
-        open={menuOpen}
-        anchorEl={menuAnchorEl}
-        onClose={handleMenuClose}
-        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-        transformOrigin={{ vertical: "top", horizontal: "left" }}
-      >
-        <Box sx={{ p: 2, width: 320, maxWidth: "100%" }}>
+        <Box sx={{ p: 2 }}>
           {onBack && (
-            <Button
-              fullWidth
-              variant="contained"
-              onClick={() => {
-                handleMenuClose();
-                onBack();
-              }}
-              sx={{ mb: 1 }}
-            >
+            <Button variant="contained" onClick={onBack} sx={{ mb: 2 }}>
               Back to Public View
             </Button>
           )}
-          <Button
-            fullWidth
-            variant="contained"
-            color="secondary"
-            onClick={() => {
-              handleMenuClose();
-              handleLogout();
-            }}
-            sx={{ mb: 2 }}
-          >
+          <Button variant="contained" color="secondary" onClick={handleLogout} sx={{ mb: 2 }}>
             Logout
           </Button>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-            Filters
+          <Typography variant="h6" gutterBottom>
+            Filters & Actions
           </Typography>
           <Stack spacing={1} sx={{ mb: 2 }}>
             <FormControl size="small" fullWidth>
@@ -1050,191 +756,95 @@ const InternalProductList = ({ onBack }) => {
                 <MenuItem value="out">Out of Stock</MenuItem>
               </Select>
             </FormControl>
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="contained"
-                fullWidth
-                onClick={() => {
-                  handleMenuClose();
-                  applyFilters();
-                }}
-              >
-                Apply
-              </Button>
-              <Button
-                variant="outlined"
-                fullWidth
-                onClick={() => {
-                  handleMenuClose();
-                  resetFilters();
-                }}
-              >
-                Reset
-              </Button>
-            </Stack>
+            <Button variant="contained" onClick={applyFilters}>
+              Apply Filters
+            </Button>
+            <Button variant="outlined" onClick={resetFilters}>
+              Reset Filters
+            </Button>
           </Stack>
-          <Divider sx={{ mb: 2 }} />
-          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-            Actions
-          </Typography>
           <Stack spacing={1}>
-            <Button
-              variant="contained"
-              onClick={() => {
-                handleMenuClose();
-                handleAddClick();
-              }}
-            >
+            <Button variant="contained" onClick={handleAddClick}>
               Add Product
             </Button>
             <Button
               variant="contained"
               color="info"
-              onClick={() => {
-                handleMenuClose();
-                setCustomizeDialogOpen(true);
-              }}
+              onClick={() => setCustomizeDialogOpen(true)}
             >
               Customize Columns
             </Button>
-            <Button
-              variant="contained"
-              color="secondary"
-              disabled={uploading}
-              onClick={() => {
-                handleMenuClose();
-                handleUploadClick();
-              }}
-            >
+            <Button variant="contained" color="secondary" onClick={handleUploadClick} disabled={uploading}>
               {uploading ? "Uploading..." : "Upload CSV"}
             </Button>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={() => {
-                handleMenuClose();
-                handleDownloadInventory();
-              }}
-            >
+            <Button variant="contained" color="primary" onClick={handleDownloadInventory}>
               Download Inventory
             </Button>
-            <Button
-              variant="contained"
-              color="success"
-              onClick={() => {
-                handleMenuClose();
-                handleSendIndividualEmails();
-              }}
-            >
+            <Button variant="contained" color="success" onClick={handleSendIndividualEmails}>
               Send Individual Emails
             </Button>
-            <Button
-              variant="contained"
-              color="success"
-              onClick={() => {
-                handleMenuClose();
-                handleSendGroupEmail();
-              }}
-            >
+            <Button variant="contained" color="success" onClick={handleSendGroupEmail}>
               Send Group Email
             </Button>
+            <Button variant="contained" color="primary" onClick={() => setSettingsDialogOpen(true)}>
+              Display & Settings
+            </Button>
           </Stack>
         </Box>
-      </Popover>
-
-      <input
-        type="file"
-        accept=".csv"
-        ref={fileInputRef}
-        style={{ display: "none" }}
-        onChange={handleFileChange}
-      />
-
-      {loading ? (
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            height: "100vh",
-          }}
-        >
-          <CircularProgress />
-        </Box>
-      ) : (
-        <>
-          <TextField
-            label="Search All Fields"
-            variant="outlined"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            fullWidth
-            sx={{ mb: 2 }}
-          />
-          <div
-            style={{
-              height: isMobile ? "calc(100vh - 150px)" : 600,
-              width: "100%",
-            }}
-          >
-            <DataGrid
-              rows={filteredProducts}
-              columns={columns}
-              getRowId={(row) => String(row.id)}
-              checkboxSelection
-              selectionModel={selectedIds}
-              onSelectionModelChange={handleSelectionModelChange}
-              pagination
-              pageSize={pageSize}
-              onPageSizeChange={setPageSize}
-              rowsPerPageOptions={[5, 10, 25, 50, 100]}
-              columnVisibilityModel={columnVisibilityModel}
-              sortModel={sortModel}
-              onSortModelChange={handleSortModelChange}
+        <input
+          type="file"
+          accept=".csv"
+          ref={fileInputRef}
+          style={{ display: "none" }}
+          onChange={handleFileChange}
+        />
+      </Drawer>
+      <Box component="main" sx={{ flexGrow: 1, p: 1 }}>
+        {loading && (
+          <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
+            <CircularProgress />
+          </Box>
+        )}
+        {!loading && (
+          <>
+            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+              {isMobile && (
+                <IconButton onClick={() => setDrawerOpen(true)} sx={{ mr: 1 }}>
+                  <MenuIcon />
+                </IconButton>
+              )}
+              <Typography variant="h4" sx={{ flexGrow: 1 }}>
+                Internal Product List
+              </Typography>
+            </Box>
+            <TextField
+              label="Search All Fields"
+              variant="outlined"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              fullWidth
+              sx={{ mb: 2 }}
             />
-          </div>
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            spacing={1}
-            sx={{ mt: 2 }}
-            alignItems={{ xs: "stretch", sm: "center" }}
-          >
-            <Button
-              variant="contained"
-              color="info"
-              onClick={handleBulkEditOpen}
-              disabled={!selectedIds.length || bulkActionLoading}
-            >
-              Bulk Edit Selected
-            </Button>
-            <Button
-              variant="contained"
-              color="warning"
-              onClick={handleBulkMarkOutOfStock}
-              disabled={!selectedIds.length || bulkActionLoading}
-            >
-              Mark Selected Out of Stock
-            </Button>
-            <Button
-              variant="contained"
-              color="secondary"
-              onClick={handleDownloadSelectedOpen}
-              disabled={!selectedIds.length || bulkActionLoading}
-            >
-              Download Selected
-            </Button>
-          </Stack>
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ mt: 1, display: 'block' }}
-          >
-            {selectedIds.length
-              ? `${selectedIds.length} item${selectedIds.length === 1 ? '' : 's'} selected`
-              : 'No items selected'}
-          </Typography>
-        </>
-      )}
+            <div style={{ height: isMobile ? "calc(100vh - 150px)" : 600, width: "100%" }}>
+              <DataGrid
+                rows={filteredProducts}
+                columns={columns}
+                getRowId={(row) => String(row.id)}
+                checkboxSelection
+                selectionModel={selectedIds}
+                onSelectionModelChange={handleSelectionModelChange}
+                pagination
+                pageSize={pageSize}
+                onPageSizeChange={setPageSize}
+                rowsPerPageOptions={[5, 10, 25, 50, 100]}
+                columnVisibilityModel={columnVisibilityModel}
+                sortModel={sortModel}
+                onSortModelChange={handleSortModelChange}
+              />
+            </div>
+          </>
+        )}
+      </Box>
       <ProductFormDialog
         open={dialogOpen}
         mode={dialogMode}
@@ -1250,100 +860,14 @@ const InternalProductList = ({ onBack }) => {
         columnVisibilityModel={columnVisibilityModel}
         onColumnVisibilityChange={handleColumnVisibilityChange}
       />
-      <Dialog
-        open={bulkEditOpen}
-        onClose={handleBulkEditClose}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle>Bulk Edit Products</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              Applying changes to {selectedIds.length} selected product{selectedIds.length === 1 ? '' : 's'}.
-            </Typography>
-            <FormControl fullWidth size="small">
-              <InputLabel>Field</InputLabel>
-              <Select
-                value={bulkEditField}
-                label="Field"
-                onChange={(e) => setBulkEditField(e.target.value)}
-              >
-                {bulkEditableFields.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField
-              label={bulkEditField === 'offer_date' ? 'New Date' : 'New Value'}
-              fullWidth
-              value={bulkEditValue}
-              onChange={(e) => setBulkEditValue(e.target.value)}
-              type={bulkInputProps.type}
-              inputProps={bulkInputProps.inputProps}
-              disabled={bulkActionLoading}
-              helperText="Leave blank to clear the value for all selected products."
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleBulkEditClose} disabled={bulkActionLoading}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleBulkEditSubmit}
-            disabled={!bulkEditField || bulkActionLoading}
-          >
-            {bulkActionLoading ? 'Applying...' : 'Apply'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog
-        open={downloadDialogOpen}
-        onClose={handleDownloadSelectedClose}
-        fullWidth
-        maxWidth="md"
-      >
-        <DialogTitle>Download Selected Products</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              Choose which columns to include for the {selectedIds.length} selected product{selectedIds.length === 1 ? '' : 's'}.
-            </Typography>
-            <FormGroup>
-              <Grid container spacing={1}>
-                {downloadableColumnOptions.map((option) => (
-                  <Grid item xs={12} sm={6} md={4} key={option.field}>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={downloadSelectedColumns.includes(option.field)}
-                          onChange={() => handleDownloadColumnToggle(option.field)}
-                        />
-                      }
-                      label={option.label}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            </FormGroup>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleDownloadSelectedClose}>Cancel</Button>
-          <Button
-            onClick={handleDownloadSelectedSubmit}
-            disabled={!sanitizeDownloadSelection(downloadSelectedColumns).length}
-          >
-            Download CSV
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <SettingsDialog
+        open={settingsDialogOpen}
+        onClose={() => setSettingsDialogOpen(false)}
+        settings={settings}
+        updateSettings={updateSettings}
+      />
     </Box>
   );
 };
 
 export default InternalProductList;
-
