@@ -23,7 +23,7 @@ import CustomizeColumnsDialog from "./CustomizeColumnsDialog";
 import { fetchProducts, createProduct, updateProduct, deleteProduct, markOutOfStock, searchProducts, uploadProducts } from "../api";
 import { sendIndividualEmails, sendGroupEmail } from "../emailSender";
 import * as XLSX from "xlsx";
-import { jwtDecode } from "jwt-decode";
+import jwtDecode from "jwt-decode";
 import { SettingsContext } from "../settings/SettingsContext";
 
 const InternalProductList = ({ onBack }) => {
