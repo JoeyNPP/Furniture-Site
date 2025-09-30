@@ -14,6 +14,14 @@ import {
   TextField,
   IconButton,
   CircularProgress,
+  Checkbox,
+  FormGroup,
+  FormControlLabel,
+  Grid,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
@@ -26,6 +34,62 @@ import { sendIndividualEmails, sendGroupEmail } from "../emailSender";
 import * as XLSX from "xlsx";
 import jwtDecode from "jwt-decode";
 import { SettingsContext } from "../settings/SettingsContext";
+
+const DEFAULT_DOWNLOAD_COLUMNS = [
+  "title",
+  "amazon_url",
+  "asin",
+  "price",
+  "moq",
+  "qty",
+  "upc",
+  "lead_time",
+  "fob",
+  "walmart_url",
+];
+
+const BULK_EDITABLE_FIELDS = [
+  { value: "title", label: "Title" },
+  { value: "category", label: "Category" },
+  { value: "vendor", label: "Vendor" },
+  { value: "vendor_id", label: "Vendor ID" },
+  { value: "lead_time", label: "Lead Time" },
+  { value: "exp_date", label: "Expiration Date" },
+  { value: "fob", label: "FOB" },
+  { value: "price", label: "Price" },
+  { value: "cost", label: "Cost" },
+  { value: "moq", label: "MOQ" },
+  { value: "qty", label: "Quantity" },
+  { value: "sales_per_month", label: "Sales Per Month" },
+  { value: "net", label: "Net" },
+  { value: "offer_date", label: "Offer Date" },
+  { value: "amazon_url", label: "Amazon URL" },
+  { value: "walmart_url", label: "Walmart URL" },
+  { value: "ebay_url", label: "eBay URL" },
+  { value: "image_url", label: "Image URL" },
+];
+
+const INTEGER_FIELDS = new Set(["moq", "qty", "sales_per_month"]);
+const DECIMAL_FIELDS = new Set(["price", "cost", "net"]);
+
+const sanitizeDownloadSelection = (fields, allowedFields) =>
+  allowedFields.filter((field) => fields.includes(field));
+
+const escapeCsvValue = (value) => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  const stringValue = String(value);
+  if (
+    stringValue.includes("\"") ||
+    stringValue.includes(",") ||
+    stringValue.includes("\n") ||
+    stringValue.includes("\r")
+  ) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+  return stringValue;
+};
 
 const InternalProductList = ({ onBack }) => {
   const fileInputRef = useRef(null);
@@ -47,7 +111,16 @@ const InternalProductList = ({ onBack }) => {
   const [customizeDialogOpen, setCustomizeDialogOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkEditField, setBulkEditField] = useState("");
+  const [bulkEditValue, setBulkEditValue] = useState("");
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+  const [downloadSelectedColumns, setDownloadSelectedColumns] = useState(DEFAULT_DOWNLOAD_COLUMNS);
   const [loading, setLoading] = useState(false);
+  const bulkEditableFields = BULK_EDITABLE_FIELDS;
+  const integerFields = INTEGER_FIELDS;
+  const decimalFields = DECIMAL_FIELDS;
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -661,6 +734,241 @@ const InternalProductList = ({ onBack }) => {
     return { ...col, width: col.width };
   });
 
+  const downloadableColumnOptions = baseColumns
+    .filter((column) => column.field !== "actions")
+    .map((column) => ({
+      field: column.field,
+      label: column.headerName || column.field,
+    }));
+  const columnFieldOrder = downloadableColumnOptions.map((option) => option.field);
+  const headerLabelByField = new Map(
+    downloadableColumnOptions.map((option) => [option.field, option.label])
+  );
+
+  const getBulkInputProps = () => {
+    if (!bulkEditField) {
+      return { type: "text" };
+    }
+    if (integerFields.has(bulkEditField)) {
+      return { type: "number", inputProps: { step: 1 } };
+    }
+    if (decimalFields.has(bulkEditField)) {
+      return { type: "number", inputProps: { step: "any" } };
+    }
+    if (bulkEditField === "offer_date") {
+      return { type: "date" };
+    }
+    return { type: "text" };
+  };
+
+  const transformBulkValue = (field, inputValue) => {
+    const normalized = (inputValue ?? "").trim();
+    if (normalized === "") {
+      return null;
+    }
+    if (decimalFields.has(field)) {
+      const parsed = parseFloat(normalized);
+      if (Number.isNaN(parsed)) {
+        throw new Error("Please enter a numeric value.");
+      }
+      return parsed;
+    }
+    if (integerFields.has(field)) {
+      const parsed = parseInt(normalized, 10);
+      if (Number.isNaN(parsed)) {
+        throw new Error("Please enter a whole number.");
+      }
+      return parsed;
+    }
+    return normalized;
+  };
+
+  const handleBulkEditOpen = () => {
+    if (!selectedIds.length) {
+      alert("Select at least one product to edit.");
+      return;
+    }
+    setBulkEditField("");
+    setBulkEditValue("");
+    setBulkEditOpen(true);
+  };
+
+  const handleBulkEditClose = () => {
+    if (bulkActionLoading) {
+      return;
+    }
+    setBulkEditOpen(false);
+    setBulkEditField("");
+    setBulkEditValue("");
+  };
+
+  const handleBulkEditSubmit = async () => {
+    if (!bulkEditField) {
+      alert("Select a field to update.");
+      return;
+    }
+    let valueToApply;
+    try {
+      valueToApply = transformBulkValue(bulkEditField, bulkEditValue);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    setBulkActionLoading(true);
+    try {
+      await Promise.all(
+        selectedIds.map((id) =>
+          updateProduct(Number(id), { [bulkEditField]: valueToApply })
+        )
+      );
+      alert(`Updated ${selectedIds.length} product${selectedIds.length === 1 ? "" : "s"}.`);
+      setBulkEditOpen(false);
+      setBulkEditField("");
+      setBulkEditValue("");
+      await loadProducts();
+    } catch (error) {
+      console.error("Bulk edit error:", error);
+      alert(`Failed to update selected products: ${error.message}`);
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkMarkOutOfStock = async () => {
+    if (!selectedIds.length) {
+      alert("Select at least one product to update.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Mark ${selectedIds.length} selected product${selectedIds.length === 1 ? "" : "s"} out of stock?`
+      )
+    ) {
+      return;
+    }
+    setBulkActionLoading(true);
+    try {
+      await Promise.all(selectedIds.map((id) => markOutOfStock(Number(id))));
+      alert(`Marked ${selectedIds.length} product${selectedIds.length === 1 ? "" : "s"} out of stock.`);
+      await loadProducts();
+    } catch (error) {
+      console.error("Bulk mark out of stock error:", error);
+      alert(`Failed to mark selected products out of stock: ${error.message}`);
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleDownloadSelectedOpen = () => {
+    if (!selectedIds.length) {
+      alert("Select at least one product to download.");
+      return;
+    }
+    const sanitized = sanitizeDownloadSelection(
+      downloadSelectedColumns.length ? downloadSelectedColumns : DEFAULT_DOWNLOAD_COLUMNS,
+      columnFieldOrder
+    );
+    setDownloadSelectedColumns(
+      sanitized.length
+        ? sanitized
+        : sanitizeDownloadSelection(DEFAULT_DOWNLOAD_COLUMNS, columnFieldOrder)
+    );
+    setDownloadDialogOpen(true);
+  };
+
+  const handleDownloadSelectedClose = () => {
+    setDownloadDialogOpen(false);
+  };
+
+  const handleDownloadColumnToggle = (field) => {
+    setDownloadSelectedColumns((prev) => {
+      const hasField = prev.includes(field);
+      const updated = hasField ? prev.filter((item) => item !== field) : [...prev, field];
+      return sanitizeDownloadSelection(updated, columnFieldOrder);
+    });
+  };
+
+  const formatDateForTimezone = (value) => {
+    if (!value) {
+      return "";
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value;
+    }
+    return parsed.toLocaleString("en-US", { timeZone: timezone });
+  };
+
+  const getDownloadValue = (product, field) => {
+    switch (field) {
+      case "customer_cost": {
+        const price = Number(product.price);
+        const moq = Number(product.moq);
+        return !Number.isNaN(price) && !Number.isNaN(moq) ? price * moq : "";
+      }
+      case "profit_per_moq": {
+        const price = Number(product.price);
+        const cost = Number(product.cost);
+        const moq = Number(product.moq);
+        return !Number.isNaN(price) && !Number.isNaN(cost) && !Number.isNaN(moq)
+          ? (price - cost) * moq
+          : "";
+      }
+      case "roi": {
+        const net = Number(product.net);
+        const price = Number(product.price);
+        return !Number.isNaN(net) && !Number.isNaN(price) && price !== 0 ? (net / price) * 100 : "";
+      }
+      case "offer_date":
+        return formatDateForTimezone(product.offer_date);
+      case "last_sent":
+        return formatDateForTimezone(product.last_sent);
+      case "exp_date":
+        return product.exp_date ? "'" + product.exp_date : "";
+      case "out_of_stock":
+        return product.out_of_stock ? "true" : "false";
+      default: {
+        const value = product[field];
+        return value ?? "";
+      }
+    }
+  };
+
+  const handleDownloadSelectedSubmit = () => {
+    const columnsToExport = sanitizeDownloadSelection(downloadSelectedColumns, columnFieldOrder);
+    if (!columnsToExport.length) {
+      alert("Select at least one column to download.");
+      return;
+    }
+    const selectedProducts = filteredProducts.filter((p) =>
+      selectedIds.includes(String(p.id))
+    );
+    if (!selectedProducts.length) {
+      alert("No products selected to download.");
+      return;
+    }
+    const headerRow = columnsToExport.map(
+      (field) => headerLabelByField.get(field) || field
+    );
+    const dataRows = selectedProducts.map((product) =>
+      columnsToExport.map((field) => escapeCsvValue(getDownloadValue(product, field)))
+    );
+    const csvContent = [headerRow, ...dataRows]
+      .map((row) => row.join(","))
+      .join("\n");
+    const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `selected_products_${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setDownloadDialogOpen(false);
+  };
+
+  const bulkInputProps = getBulkInputProps();
   const allCategories = [
     "Appliances",
     "Automotive",
@@ -843,6 +1151,49 @@ const InternalProductList = ({ onBack }) => {
                 onSortModelChange={handleSortModelChange}
               />
             </div>
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              spacing={2}
+              alignItems={{ xs: "stretch", md: "center" }}
+              justifyContent="space-between"
+              sx={{ mt: 2 }}
+            >
+              <Typography variant="caption" color="text.secondary">
+                {selectedIds.length
+                  ? `${selectedIds.length} item${selectedIds.length === 1 ? "" : "s"} selected`
+                  : "No items selected"}
+              </Typography>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={1}
+                sx={{ width: { xs: "100%", sm: "auto" } }}
+              >
+                <Button
+                  variant="contained"
+                  color="info"
+                  onClick={handleBulkEditOpen}
+                  disabled={!selectedIds.length || bulkActionLoading}
+                >
+                  Bulk Edit Selected
+                </Button>
+                <Button
+                  variant="contained"
+                  color="warning"
+                  onClick={handleBulkMarkOutOfStock}
+                  disabled={!selectedIds.length || bulkActionLoading}
+                >
+                  Mark Selected Out of Stock
+                </Button>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  onClick={handleDownloadSelectedOpen}
+                  disabled={!selectedIds.length || bulkActionLoading}
+                >
+                  Download Selected
+                </Button>
+              </Stack>
+            </Stack>
           </>
         )}
       </Box>
@@ -861,6 +1212,97 @@ const InternalProductList = ({ onBack }) => {
         columnVisibilityModel={columnVisibilityModel}
         onColumnVisibilityChange={handleColumnVisibilityChange}
       />
+      <Dialog
+        open={bulkEditOpen}
+        onClose={handleBulkEditClose}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Bulk Edit Products</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Applying changes to {selectedIds.length} selected product{selectedIds.length === 1 ? "" : "s"}.
+            </Typography>
+            <FormControl fullWidth size="small">
+              <InputLabel>Field</InputLabel>
+              <Select
+                value={bulkEditField}
+                label="Field"
+                onChange={(e) => setBulkEditField(e.target.value)}
+              >
+                {bulkEditableFields.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label={bulkEditField === "offer_date" ? "New Date" : "New Value"}
+              fullWidth
+              value={bulkEditValue}
+              onChange={(e) => setBulkEditValue(e.target.value)}
+              type={bulkInputProps.type}
+              inputProps={bulkInputProps.inputProps}
+              disabled={bulkActionLoading}
+              helperText="Leave blank to clear the value for all selected products."
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleBulkEditClose} disabled={bulkActionLoading}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleBulkEditSubmit}
+            disabled={!bulkEditField || bulkActionLoading}
+          >
+            {bulkActionLoading ? "Applying..." : "Apply"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={downloadDialogOpen}
+        onClose={handleDownloadSelectedClose}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>Download Selected Products</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Choose which columns to include for the {selectedIds.length} selected product{selectedIds.length === 1 ? "" : "s"}.
+            </Typography>
+            <FormGroup>
+              <Grid container spacing={1}>
+                {downloadableColumnOptions.map((option) => (
+                  <Grid item xs={12} sm={6} md={4} key={option.field}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={downloadSelectedColumns.includes(option.field)}
+                          onChange={() => handleDownloadColumnToggle(option.field)}
+                        />
+                      }
+                      label={option.label}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </FormGroup>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDownloadSelectedClose}>Cancel</Button>
+          <Button
+            onClick={handleDownloadSelectedSubmit}
+            disabled={!sanitizeDownloadSelection(downloadSelectedColumns, columnFieldOrder).length}
+          >
+            Download CSV
+          </Button>
+        </DialogActions>
+      </Dialog>
       <SettingsDialog
         open={settingsDialogOpen}
         onClose={() => setSettingsDialogOpen(false)}
@@ -872,3 +1314,4 @@ const InternalProductList = ({ onBack }) => {
 };
 
 export default InternalProductList;
+
