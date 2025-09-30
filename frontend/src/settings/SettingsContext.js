@@ -11,7 +11,6 @@ export const SettingsProvider = ({ children }) => {
 
   const updateSettings = (newSettings) => {
     setSettings((prevSettings) => ({ ...prevSettings, ...newSettings }));
-    // Optionally save to localStorage or API
     localStorage.setItem("userSettings", JSON.stringify({ ...settings, ...newSettings }));
   };
 
@@ -22,6 +21,4 @@ export const SettingsProvider = ({ children }) => {
   );
 };
 
-export const useSettings = () => useContext(SettingsContext);
-
-export default SettingsContext;
+export { SettingsContext };
