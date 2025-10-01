@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import Optional, List
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, Json
 from datetime import datetime, timedelta
 import jwt
 import bcrypt
@@ -538,7 +538,7 @@ async def update_user_settings(settings: UserSettings, current_user: str = Depen
         INSERT INTO user_settings (username, settings)
         VALUES (%s, %s)
         ON CONFLICT (username) DO UPDATE SET settings = EXCLUDED.settings
-    """, (current_user, settings.dict()))
+    """, (current_user, Json(settings.dict())))
     conn.commit()
     cur.close()
     conn.close()
@@ -548,8 +548,10 @@ async def update_user_settings(settings: UserSettings, current_user: str = Depen
 async def create_user_settings(settings: UserSettings, current_user: str = Depends(get_current_user)):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("INSERT INTO user_settings (username, settings) VALUES (%s, %s) ON CONFLICT (username) DO NOTHING", (current_user, settings.dict()))
+    cur.execute("INSERT INTO user_settings (username, settings) VALUES (%s, %s) ON CONFLICT (username) DO NOTHING", (current_user, Json(settings.dict())))
     conn.commit()
     cur.close()
     conn.close()
     return {"message": "Settings created", "settings": settings.dict()}
+
+
