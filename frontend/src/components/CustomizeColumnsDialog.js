@@ -39,12 +39,13 @@ const CustomizeColumnsDialog = ({
     );
   }
 
-  // Handle toggling a column’s visibility
+  // Handle toggling a column???s visibility
   const handleToggleColumn = (field) => {
-    // Flip the boolean
-    const newVisibility = !columnVisibilityModel[field];
-    // Create a new object
-    const updatedModel = { ...columnVisibilityModel, [field]: newVisibility };
+    const currentlyVisible =
+      Object.prototype.hasOwnProperty.call(columnVisibilityModel, field)
+        ? !!columnVisibilityModel[field]
+        : true;
+    const updatedModel = { ...columnVisibilityModel, [field]: !currentlyVisible };
     onColumnVisibilityChange(updatedModel);
   };
 
@@ -56,7 +57,11 @@ const CustomizeColumnsDialog = ({
           {columns.map((col) => (
             <ListItem key={col.field} dense button onClick={() => handleToggleColumn(col.field)}>
               <Checkbox
-                checked={!!columnVisibilityModel[col.field]}
+                checked={
+                  Object.prototype.hasOwnProperty.call(columnVisibilityModel, col.field)
+                    ? !!columnVisibilityModel[col.field]
+                    : true
+                }
                 tabIndex={-1}
                 disableRipple
               />
@@ -73,3 +78,4 @@ const CustomizeColumnsDialog = ({
 };
 
 export default CustomizeColumnsDialog;
+
