@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useContext, useMemo } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Login from "./components/Login";
 import InternalProductList from "./components/InternalProductList";
-import { Box } from "@mui/material";
+import { Box, CssBaseline } from "@mui/material";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+import { SettingsContext } from "./settings/SettingsContext";
 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem("token");
@@ -15,21 +17,39 @@ const ProtectedRoute = ({ children }) => {
 };
 
 const App = () => {
+  const { settings } = useContext(SettingsContext);
+
+  const theme = useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode: settings.theme === "dark" ? "dark" : "light",
+        },
+        typography: {
+          fontSize: 14 * (settings.textScale || 1),
+        },
+      }),
+    [settings.theme, settings.textScale]
+  );
+
   return (
-    <Box sx={{ p: 2 }}>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/products"
-          element={
-            <ProtectedRoute>
-              <InternalProductList />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/" element={<Navigate to="/login" replace />} />
-      </Routes>
-    </Box>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box sx={{ p: 2 }}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/products"
+            element={
+              <ProtectedRoute>
+                <InternalProductList />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </Box>
+    </ThemeProvider>
   );
 };
 

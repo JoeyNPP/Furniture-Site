@@ -1,17 +1,59 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { fetchUserSettings, persistUserSettings } from "../api";
 
-const SettingsContext = createContext();
+const DEFAULT_SETTINGS = {
+  theme: "light",
+  textScale: 1.0,
+  columnVisibility: { title: true, price: true },
+};
+
+const loadStoredSettings = () => {
+  try {
+    const raw = localStorage.getItem("userSettings");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...DEFAULT_SETTINGS, ...parsed };
+    }
+  } catch (error) {
+    console.error("Failed to parse stored user settings:", error);
+  }
+  return DEFAULT_SETTINGS;
+};
+
+const SettingsContext = createContext({
+  settings: DEFAULT_SETTINGS,
+  updateSettings: () => {},
+});
 
 export const SettingsProvider = ({ children }) => {
-  const [settings, setSettings] = useState({
-    theme: "light",
-    textScale: 1.0,
-    columnVisibility: { title: true, price: true },
-  });
+  const [settings, setSettings] = useState(loadStoredSettings);
 
-  const updateSettings = (newSettings) => {
-    setSettings((prevSettings) => ({ ...prevSettings, ...newSettings }));
-    localStorage.setItem("userSettings", JSON.stringify({ ...settings, ...newSettings }));
+  useEffect(() => {
+    let isMounted = true;
+    const bootstrap = async () => {
+      const remoteSettings = await fetchUserSettings();
+      if (remoteSettings && isMounted) {
+        setSettings((prev) => {
+          const merged = { ...prev, ...remoteSettings };
+          localStorage.setItem("userSettings", JSON.stringify(merged));
+          return merged;
+        });
+      }
+    };
+
+    bootstrap();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const updateSettings = (partialSettings) => {
+    setSettings((prev) => {
+      const merged = { ...prev, ...partialSettings };
+      localStorage.setItem("userSettings", JSON.stringify(merged));
+      persistUserSettings(merged);
+      return merged;
+    });
   };
 
   return (
@@ -22,3 +64,4 @@ export const SettingsProvider = ({ children }) => {
 };
 
 export { SettingsContext };
+export const useSettings = () => useContext(SettingsContext);

@@ -1,231 +1,230 @@
-import jwtDecode from 'jwt-decode'; // Compatible with jwt-decode@3.x
+import jwtDecode from "jwt-decode"; // Compatible with jwt-decode@3.x
 
-const API_BASE_URL = process.env.REACT_APP_FRONTEND_URL || 'http://159.65.184.143:8000';
+export const API_BASE_URL = process.env.REACT_APP_FRONTEND_URL || "http://159.65.184.143:8000";
+
+const withAuthHeaders = (token, extra = {}) => ({
+  Authorization: `Bearer ${token}`,
+  ...extra,
+});
+
 async function login(username, password) {
   try {
-    console.log(`Attempting login request for username: ${username}`);
     const response = await fetch(`${API_BASE_URL}/login`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: new URLSearchParams({
-        'username': username,
-        'password': password,
-      }),
+      body: new URLSearchParams({ username, password }),
     });
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Login failed with status ${response.status}: ${errorText}`);
-      throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
-    const data = await response.json();
-    console.log(`Login successful for username: ${username}`);
-    return data;
+    return await response.json();
   } catch (error) {
-    console.error(`Login error for username: ${username}: ${error.message}`);
+    console.error(`Login failed for ${username}:`, error);
     throw error;
   }
 }
+
+function requireToken() {
+  const token = localStorage.getItem("token");
+  if (!token) {
+    throw new Error("Authentication token not found");
+  }
+  return token;
+}
+
 async function fetchProducts() {
+  const token = requireToken();
   try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error('Fetch products failed: No token found');
-      throw new Error('No token found');
-    }
-    // Decode token if needed (example usage)
     const decodedToken = jwtDecode(token);
-    console.log('Attempting to fetch products with decoded token:', decodedToken);
+    console.debug("Fetching products with token exp:", decodedToken.exp);
     const response = await fetch(`${API_BASE_URL}/products`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
     });
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Fetch products failed with status ${response.status}: ${errorText}`);
-      throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
-    const data = await response.json();
-    console.log('Products fetched successfully');
-    return data;
+    return await response.json();
   } catch (error) {
-    console.error(`Fetch products error: ${error.message}`);
+    console.error("Fetch products error:", error);
     throw error;
   }
 }
+
 async function createProduct(data) {
+  const token = requireToken();
   try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error('Create product failed: No token found');
-      throw new Error('No token found');
-    }
-    console.log('Sending POST with data:', data);
     const response = await fetch(`${API_BASE_URL}/products`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      method: "POST",
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
       body: JSON.stringify(data),
     });
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Create product failed with status ${response.status}: ${errorText}`);
-      throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
-    const result = await response.json();
-    console.log('Product created successfully:', result);
-    return result;
+    return await response.json();
   } catch (error) {
-    console.error(`Create product error: ${error.message}`);
+    console.error("Create product error:", error);
     throw error;
   }
 }
+
 async function updateProduct(id, data) {
+  const token = requireToken();
   try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error(`Update product failed for ID ${id}: No token found`);
-      throw new Error('No token found');
-    }
-    console.log(`Preparing PATCH for ID: ${id} with data:`, JSON.stringify(data, null, 2));
     const response = await fetch(`${API_BASE_URL}/products/${id}`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      method: "PATCH",
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
       body: JSON.stringify(data),
     });
-    console.log(`PATCH response status for ID ${id}: ${response.status}`);
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Update product failed for ID ${id} with status ${response.status}: ${errorText}`);
-      throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
-    const result = await response.json();
-    console.log(`Product updated successfully for ID ${id}`);
-    return result;
+    return await response.json();
   } catch (error) {
-    console.error(`Update product error for ID ${id}: ${error.message}`);
+    console.error(`Update product error for ID ${id}:`, error);
     throw error;
   }
 }
+
 async function deleteProduct(id) {
+  const token = requireToken();
   try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error(`Delete product failed for ID ${id}: No token found`);
-      throw new Error('No token found');
-    }
-    console.log(`Attempting to delete product with ID: ${id}`);
     const response = await fetch(`${API_BASE_URL}/products/${id}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      method: "DELETE",
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
     });
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Delete product failed for ID ${id} with status ${response.status}: ${errorText}`);
-      throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
-    const result = await response.json();
-    console.log(`Product deleted successfully for ID ${id}`);
-    return result;
+    return await response.json();
   } catch (error) {
-    console.error(`Delete product error for ID ${id}: ${error.message}`);
+    console.error(`Delete product error for ID ${id}:`, error);
     throw error;
   }
 }
+
 async function markOutOfStock(id) {
+  const token = requireToken();
   try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error(`Mark out-of-stock failed for ID ${id}: No token found`);
-      throw new Error('No token found');
-    }
-    console.log(`Attempting to mark product out-of-stock for ID: ${id}`);
     const response = await fetch(`${API_BASE_URL}/products/${id}/mark-out-of-stock`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      method: "POST",
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
     });
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Mark out-of-stock failed for ID ${id} with status ${response.status}: ${errorText}`);
-      throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
-    const result = await response.json();
-    console.log(`Product marked out-of-stock successfully for ID ${id}`);
-    return result;
+    return await response.json();
   } catch (error) {
-    console.error(`Mark out-of-stock error for ID ${id}: ${error.message}`);
+    console.error(`Mark out-of-stock error for ID ${id}:`, error);
     throw error;
   }
 }
+
 async function uploadProducts(file) {
+  const token = requireToken();
   try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error('Upload products failed: No token found');
-      throw new Error('No token found');
-    }
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append("file", file);
     const response = await fetch(`${API_BASE_URL}/products/import`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
+      method: "POST",
+      headers: withAuthHeaders(token),
       body: formData,
     });
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Upload products failed with status ${response.status}: ${errorText}`);
-      throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
-    const result = await response.json();
-    console.log('Products uploaded successfully:', result);
-    return result;
+    return await response.json();
   } catch (error) {
-    console.error(`Upload products error: ${error.message}`);
+    console.error("Upload products error:", error);
     throw error;
   }
 }
 
 async function searchProducts(query) {
+  const token = requireToken();
   try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error(`Search products failed for query '${query}': No token found`);
-      throw new Error('No token found');
-    }
-    console.log(`Attempting to search products with query: ${query}`);
     const response = await fetch(`${API_BASE_URL}/products/search?query=${encodeURIComponent(query)}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
     });
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Search products failed for query '${query}' with status ${response.status}: ${errorText}`);
-      throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
-    const result = await response.json();
-    console.log(`Products searched successfully for query: ${query}`);
-    return result;
+    return await response.json();
   } catch (error) {
-    console.error(`Search products error for query '${query}': ${error.message}`);
+    console.error(`Search products error for query '${query}':`, error);
     throw error;
   }
 }
-export { login, fetchProducts, createProduct, updateProduct, deleteProduct, markOutOfStock, searchProducts, uploadProducts };
+
+export async function fetchUserSettings() {
+  const token = localStorage.getItem("token");
+  if (!token) {
+    return null;
+  }
+  try {
+    const response = await fetch(`${API_BASE_URL}/user/settings`, {
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
+    });
+    if (response.status === 404) {
+      return null;
+    }
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Fetch user settings error:", error);
+    return null;
+  }
+}
+
+export async function persistUserSettings(nextSettings) {
+  const token = localStorage.getItem("token");
+  if (!token) {
+    return;
+  }
+  const options = {
+    headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
+    body: JSON.stringify(nextSettings),
+  };
+  try {
+    let response = await fetch(`${API_BASE_URL}/user/settings`, {
+      method: "PATCH",
+      ...options,
+    });
+    if (response.status === 404) {
+      response = await fetch(`${API_BASE_URL}/user/settings`, {
+        method: "POST",
+        ...options,
+      });
+    }
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+  } catch (error) {
+    console.error("Persist user settings error:", error);
+  }
+}
+
+export {
+  login,
+  fetchProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  markOutOfStock,
+  searchProducts,
+  uploadProducts,
+};
