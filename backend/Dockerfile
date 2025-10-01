@@ -3,7 +3,8 @@
 FROM python:3.8-slim AS builder
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
 ### Final stage: copy in both site-packages and CLI tools ###
 FROM python:3.8-slim

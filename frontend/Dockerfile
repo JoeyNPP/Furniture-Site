@@ -3,8 +3,10 @@ ARG REACT_APP_FRONTEND_URL
 ENV REACT_APP_FRONTEND_URL=$REACT_APP_FRONTEND_URL
 ENV NODE_OPTIONS="--max-old-space-size=4096 --openssl-legacy-provider"
 WORKDIR /app
+RUN npm install -g npm@11.6.1
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --legacy-peer-deps
+RUN npx update-browserslist-db@latest --update-db || true
 COPY . .
 RUN npm run build
 FROM nginx:alpine
