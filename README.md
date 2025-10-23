@@ -171,7 +171,7 @@ SQL
   netstat -a -n -o | Select-String "8000"
   netstat -a -n -o | Select-String "5432"
   ```
-  Terminate with `Stop-Process -Id <PID>` or adjust compose ports.
+  Terminate with `Stop-Process -Id <PID>` (PowerShell) or `taskkill /PID <PID> /F` (cmd) before re-running compose.
 - **Firewall blocks**: Allow traffic explicitly:
   ```powershell
   netsh advfirewall firewall add rule name="NPP_Deals_Backend" dir=in action=allow protocol=TCP localport=8000
