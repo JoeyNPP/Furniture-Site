@@ -2,6 +2,7 @@ import React, { useContext, useMemo } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Login from "./components/Login";
 import InternalProductList from "./components/InternalProductList";
+import CategoryPage from "./components/CategoryPage";
 import { Box, CssBaseline } from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { SettingsContext } from "./settings/SettingsContext";
@@ -46,6 +47,7 @@ const App = () => {
               </ProtectedRoute>
             }
           />
+          <Route path="/category/:category" element={<CategoryPage />} />
           <Route path="/" element={<Navigate to="/login" replace />} />
         </Routes>
       </Box>

@@ -1,6 +1,6 @@
 import jwtDecode from "jwt-decode"; // Compatible with jwt-decode@3.x
 
-export const API_BASE_URL = process.env.REACT_APP_FRONTEND_URL || "http://159.65.184.143:8000";
+export const API_BASE_URL = process.env.REACT_APP_API_URL || process.env.REACT_APP_FRONTEND_URL || "http://159.65.184.143:8000";
 
 const withAuthHeaders = (token, extra = {}) => ({
   Authorization: `Bearer ${token}`,
@@ -149,6 +149,28 @@ async function uploadProducts(file) {
   }
 }
 
+async function fetchProductsByCategory(category) {
+  const token = localStorage.getItem("token");
+  const headers = token ? withAuthHeaders(token) : {};
+  try {
+    const response = await fetch(`${API_BASE_URL}/products/category/${encodeURIComponent(category)}`, {
+      headers,
+    });
+    if (!response.ok) {
+      if (response.status === 404) {
+        return { category, products: [] };
+      }
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error(`Fetch products by category failed for ${category}:`, error);
+    throw error;
+  }
+}
+
+
 async function searchProducts(query) {
   const token = requireToken();
   try {
@@ -221,6 +243,7 @@ export async function persistUserSettings(nextSettings) {
 export {
   login,
   fetchProducts,
+  fetchProductsByCategory,
   createProduct,
   updateProduct,
   deleteProduct,

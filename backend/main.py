@@ -233,6 +233,39 @@ async def get_products(current_user: str = Depends(get_current_user)):
     conn.close()
     return {"products": products}
 
+
+@app.get("/products/category/{category}")
+async def get_products_by_category(category: str):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT title, price, COALESCE(image_url, '') AS image_url
+        FROM products
+        WHERE category IS NOT NULL AND LOWER(category) = LOWER(%s)
+        ORDER BY title ASC
+        """,
+        (category,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No products found in category {category}",
+        )
+    simplified = []
+    for row in rows:
+        simplified.append(
+            {
+                "title": row.get("title"),
+                "price": row.get("price"),
+                "image_url": row.get("image_url") or "https://via.placeholder.com/150",
+            }
+        )
+    return {"category": category, "products": simplified}
+
 @app.post("/products")
 async def create_product(product: Product, current_user: str = Depends(get_current_user)):
     conn = get_db_connection()
