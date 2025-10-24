@@ -242,7 +242,7 @@ async def get_products_by_category(category: str):
         """
         SELECT title, price, COALESCE(image_url, '') AS image_url
         FROM products
-        WHERE category IS NOT NULL AND LOWER(category) = LOWER(%s)
+        WHERE category IS NOT NULL AND LOWER(TRIM(category)) = LOWER(TRIM(%s))
         ORDER BY title ASC
         """,
         (category,),
