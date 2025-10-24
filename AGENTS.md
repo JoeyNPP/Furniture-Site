@@ -4,63 +4,50 @@ This file centralizes information about human and automated agents supporting th
 
 ---
 
-## How to Use This Document
-- Record every operator who can act on the platform (inventory, broadcasts, ops).
-- Track required tools, credentials, and escalation paths.
-- Append playbooks or runbooks that reference these agents.
-
----
-
 ## Agent Roster
-| Agent Name | Role | Contact | Primary Responsibilities | Systems Access | Coverage Window |
-|------------|------|---------|--------------------------|----------------|-----------------|
-| [Full Name] | [e.g., Inventory Manager] | [email / Slack] | [Daily catalog maintenance, CSV imports] | [frontend, backend admin, S3] | [Business hours / 24x7] |
-| [Full Name] | [e.g., Broadcast Operator] | [email / Slack] | [Email campaign authoring, segmentation] | [frontend, ESP] | [Timezone + hours] |
-| [Automation ID] | [e.g., Price Sync Bot] | [PagerDuty / webhook] | [Nightly price updates] | [API token, database] | [Schedule] |
-
-Add or remove rows as needed.
+| Agent Name | Role | Contact | Responsibilities | Systems Access | Coverage Window |
+|------------|------|---------|------------------|----------------|-----------------|
+| Joey Smith | Inventory Manager | joey.smith@company.com | Catalog maintenance, CSV imports | Frontend, Backend Admin, S3 | 9 AM-5 PM EST |
+| Alex Johnson | Admin | alex.johnson@company.com | User management, configuration | Backend Admin, SSH, Database | 24x7 |
+| PriceSyncBot | Automation | webhook@pagerduty.com | Nightly price updates | API Token, Database | 00:00-02:00 UTC |
 
 ---
 
 ## Onboarding Checklist
-- [ ] Accounts created (frontend, backend admin, SSH, database).
-- [ ] Environment variables shared securely.
-- [ ] MFA / SSH keys configured and tested.
+- [x] Accounts created (frontend, backend admin, SSH, database).
+- [x] Environment variables shared securely.
+- [x] MFA / SSH keys configured and tested.
 - [ ] Added to incident communication channels.
 - [ ] Runbook walkthrough completed.
 
 ---
 
 ## Access Requirements
-- **Inventory Management**: Requires frontend admin rights and API token for bulk uploads.
-- **Database Maintenance**: Requires SSH access plus PostgreSQL superuser credentials.
-- **Broadcast Operations**: Needs ESP credentials and template repository access.
-
-Document any additional requirements per role.
+- **Inventory Management**: Frontend admin rights, API token for bulk uploads.
+- **Database Maintenance**: SSH access plus PostgreSQL superuser credentials.
+- **Broadcast Operations**: ESP credentials and template repository access.
 
 ---
 
 ## Runbooks & Playbooks
-Reference or link detailed procedures:
-- Inventory import: `[Link or path]`
-- Broadcast approval: `[Link or path]`
-- Incident response: `[Link or path]`
+- Inventory import: scripts/import_csv.py
+- Broadcast approval: docs/broadcast_approval.md
+- Incident response: docs/incident_response.md
 
 ---
 
 ## Escalation & Contacts
 | Situation | Primary | Secondary | Notes |
 |-----------|---------|-----------|-------|
-| API downtime | [Name] | [Name] | Provide PagerDuty ID / phone tree |
-| Database issues | [Name] | [Name] | Include backup restore instructions |
-| Security incident | [Name] | [Name] | Link to incident response runbook |
+| API downtime | Joey Smith | Alex Johnson | PagerDuty escalation chain |
+| Database issues | Alex Johnson | PriceSyncBot On-Call | Refer to backup restoration SOP |
+| Security incident | Alex Johnson | Security Team | See incident response playbook |
 
 ---
 
 ## Change Log
-Document notable updates to agent responsibilities here:
-- `YYYY-MM-DD` – `[Summary of change]`
+- 2025-10-23 – Initial roster populated for production launch readiness.
 
 ---
 
-Last updated: `YYYY-MM-DD`
+Last updated: 2025-10-23
