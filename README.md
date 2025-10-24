@@ -128,6 +128,11 @@ docker-compose.yml Full stack orchestration (backend, frontend, Postgres, worker
 
 ---
 
+## Customer Catalogue Pages
+- Public endpoint `GET /products/category/{category}` returns simplified product details (title, price, image).
+- Frontend route `/category/:category` renders customer pages without requiring an admin login.
+- Add direct links per category (for example `/category/Home%20%26%20Kitchen`) for storefront navigation.
+
 ## Authentication & Data Checks
 ### Generate a JWT
 - **Bash (Droplet/WSL)**
