@@ -1,6 +1,8 @@
 import os
 import csv
 import io
+import re
+import unicodedata
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -102,6 +104,18 @@ def init_db():
     conn.commit()
     cur.close()
     conn.close()
+
+def normalize_category_value(value: Optional[str]) -> str:
+    """Return a normalized key for category comparisons."""
+    if not value:
+        return ""
+    normalized = unicodedata.normalize("NFKD", value)
+    ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
+    ascii_only = ascii_only.replace("&", " and ")
+    ascii_only = re.sub(r"[^\w\s]", " ", ascii_only)
+    ascii_only = re.sub(r"\s+", " ", ascii_only)
+    return ascii_only.strip().lower()
+
 
 # Initialize database
 init_db()
@@ -236,35 +250,42 @@ async def get_products(current_user: str = Depends(get_current_user)):
 
 @app.get("/products/category/{category}")
 async def get_products_by_category(category: str):
+    normalized_query = normalize_category_value(category)
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT title, price, COALESCE(image_url, '') AS image_url
+        SELECT title, price, COALESCE(image_url, '') AS image_url, category
         FROM products
-        WHERE category IS NOT NULL AND LOWER(TRIM(category)) = LOWER(TRIM(%s))
+        WHERE category IS NOT NULL
         ORDER BY title ASC
-        """,
-        (category,),
+        """
     )
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    if not rows:
+
+    filtered = [
+        row for row in rows
+        if normalize_category_value(row.get("category")) == normalized_query
+    ]
+    if not filtered:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No products found in category {category}",
         )
-    simplified = []
-    for row in rows:
-        simplified.append(
-            {
-                "title": row.get("title"),
-                "price": row.get("price"),
-                "image_url": row.get("image_url") or "https://via.placeholder.com/150",
-            }
-        )
-    return {"category": category, "products": simplified}
+
+    display_category = (filtered[0].get("category") or category).strip()
+
+    simplified = [
+        {
+            "title": row.get("title"),
+            "price": row.get("price"),
+            "image_url": row.get("image_url") or "https://via.placeholder.com/150",
+        }
+        for row in filtered
+    ]
+    return {"category": display_category, "products": simplified}
 
 @app.post("/products")
 async def create_product(product: Product, current_user: str = Depends(get_current_user)):

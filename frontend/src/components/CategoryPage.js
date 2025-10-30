@@ -10,24 +10,31 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
 
 const CategoryPage = () => {
   const { category } = useParams();
+  const safeCategory = useMemo(() => decodeURIComponent(category || ""), [category]);
   const [products, setProducts] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [displayCategory, setDisplayCategory] = useState(safeCategory);
+  const categoryLabel = displayCategory || safeCategory;
 
-  const safeCategory = useMemo(() => decodeURIComponent(category || ""), [category]);
 
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
     setError(null);
+    setProducts([]);
+    setDisplayCategory(safeCategory);
     fetchProductsByCategory(safeCategory)
       .then((payload) => {
         if (!isMounted) return;
         setProducts(payload?.products ?? []);
+        const rawCategory = typeof payload?.category === 'string' ? payload.category.trim() : '';
+        setDisplayCategory(rawCategory || safeCategory);
       })
       .catch(() => {
         if (!isMounted) return;
         setError("We couldn't load products for this category right now. Please try again later.");
+        setProducts([]);
       })
       .finally(() => {
         if (!isMounted) return;
@@ -39,7 +46,7 @@ const CategoryPage = () => {
   }, [safeCategory]);
 
   if (loading) {
-    return <div>Loading {safeCategory} products…</div>;
+    return <div>Loading {categoryLabel} products.</div>;
   }
 
   if (error) {
@@ -47,12 +54,12 @@ const CategoryPage = () => {
   }
 
   if (!products.length) {
-    return <div>No products found in {safeCategory}.</div>;
+    return <div>No products found in {categoryLabel}.</div>;
   }
 
   return (
     <div>
-      <h1>{safeCategory} Products</h1>
+      <h1>{categoryLabel} Products</h1>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "16px" }}>
         {products.map((product) => (
           <article
