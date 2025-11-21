@@ -1,3 +1,4 @@
+RUN cd node_modules/.bin && rm -f react-scripts && ln -s ../react-scripts/bin/react-scripts.js react-scripts 
 FROM node:20 AS builder
 ARG REACT_APP_FRONTEND_URL
 ENV REACT_APP_FRONTEND_URL=$REACT_APP_FRONTEND_URL
