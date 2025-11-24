@@ -185,6 +185,21 @@ export const theme = createTheme({
 
 ---
 
+## backend/requirements.txt
+
+```
+fastapi==0.118.0
+uvicorn[standard]==0.33.0
+psycopg2-binary==2.9.10
+python-dotenv==1.0.1
+PyJWT==2.9.0
+bcrypt==4.3.0
+python-multipart==0.0.20
+pytz==2024.1
+```
+
+---
+
 ## backend/main.py (CORS section)
 
 ```python
@@ -260,17 +275,47 @@ docker-compose down
 
 4. **Admin Panel** (`/` with login)
    - Full product management
-   - CSV import
+   - CSV import with flexible date parsing (7 formats supported)
+   - CSV export with timestamps
    - Mark out of stock
+   - Dark mode toggle (persists across sessions)
+   - EST timezone tracking for new products
 
 ---
 
 ## Git Commit History (recent)
 
+- `51c0eee98` - Add flexible CSV date parsing, EST timezone support, and dark mode fix
 - `213a795bc` - Fix Request Invoice button to use unified email format
 - `9e5789dc7` - Add qty selector to Request Invoice button on product cards
 - `c7252f7ab` - Add SSL support for catalog.nat-procurement.com
 
 ---
 
-*Backup created: November 23, 2025 at ~11:30 PM EST*
+## Recent Updates (November 24, 2025)
+
+### CSV Import/Export Enhancements
+- **Flexible Date Parsing**: Upload CSVs with 7 different date/time formats
+  - `11/21/2025, 12:00:00 AM` (with comma and AM/PM)
+  - `11/21/2025 12:00:00 AM` (without comma)
+  - `11/21/2025` (date only)
+  - `2025-11-21` (ISO format)
+  - `11-21-2025` (dashes)
+  - `2025-11-21 00:00:00` (ISO with time)
+  - `11/21/2025 00:00:00` (24-hour format)
+- **Column Header Support**: Accepts both "Date" and "Offer Date", "Last Sent"
+- **Boolean Handling**: out_of_stock accepts true/false/1/0/yes/y
+- **Download Format**: Exports with timestamps for full data backup
+
+### Timezone Support
+- Added pytz==2024.1 for accurate EST/EDT handling
+- New products automatically use current EST time (not midnight)
+- Maintains accurate timestamps for offer tracking
+
+### Dark Mode Fix
+- Fixed persistence issue (was checking wrong property)
+- Now properly saves and restores dark/light theme across sessions
+
+---
+
+*Backup updated: November 24, 2025 at ~2:40 PM EST*
