@@ -3,7 +3,10 @@
     "allow": [
       "Bash(cat:*)",
       "Bash(time:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd SSL support for catalog.nat-procurement.com\n\n- Updated nginx.conf to accept catalog.nat-procurement.com server name\n- Added CORS origins for https/http catalog.nat-procurement.com\n- Backend Dockerfile pip warnings already suppressed\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(npm start)"
     ],
     "deny": [],
     "ask": []

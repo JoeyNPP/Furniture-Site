@@ -47,6 +47,7 @@ const Catalog = () => {
   const [selectedMarketplaces, setSelectedMarketplaces] = useState({});
   const [showInStockOnly, setShowInStockOnly] = useState(true);
   const [selectedForInvoice, setSelectedForInvoice] = useState({}); // {productId: quantity}
+  const [cardQtySelections, setCardQtySelections] = useState({}); // {productId: quantity} for individual card Request Invoice buttons
   const [dealCostRange, setDealCostRange] = useState([0, Infinity]);
 
   // Deal cost preset options
@@ -217,8 +218,8 @@ const Catalog = () => {
   };
 
   // Generate mailto link for single product
-  const generateSingleProductEmail = (product) => {
-    const dealCost = getDealCost(product);
+  const generateSingleProductEmail = (product, qty) => {
+    const totalCost = (parseFloat(product.price) || 0) * qty;
     const asinPart = product.asin ? ` [${product.asin}]` : "";
     const subject = encodeURIComponent(`Invoice Request: ${product.title}${asinPart}`);
     const body = encodeURIComponent(
@@ -228,9 +229,8 @@ const Catalog = () => {
       `ASIN: ${product.asin || "N/A"}\n` +
       `UPC: ${product.upc || "N/A"}\n` +
       `Price: $${product.price}\n` +
-      `MOQ: ${product.moq}\n` +
-      `Deal Cost: $${dealCost ? dealCost.toLocaleString() : "N/A"}\n` +
-      `Qty Available: ${product.qty}\n` +
+      `Qty: ${qty}\n` +
+      `Total: $${totalCost.toLocaleString()}\n` +
       `FOB: ${product.fob || "N/A"}\n\n` +
       `Please send me an invoice at your earliest convenience.\n\n` +
       `Thank you!`
@@ -669,19 +669,33 @@ const Catalog = () => {
                           </Button>
                         )}
                       </Box>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        color="success"
-                        startIcon={<EmailIcon />}
-                        href={generateSingleProductEmail(p)}
-                        sx={{
-                          fontWeight: 600,
-                          textTransform: "none",
-                        }}
-                      >
-                        Request Invoice
-                      </Button>
+                      <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+                        <Select
+                          size="small"
+                          value={cardQtySelections[p.id] || (getMoqOptions(p)[0] || p.moq || 1)}
+                          onChange={(e) => setCardQtySelections(prev => ({ ...prev, [p.id]: e.target.value }))}
+                          sx={{ minWidth: 70, height: 32, fontSize: "0.8rem" }}
+                        >
+                          {getMoqOptions(p).map((qty) => (
+                            <MenuItem key={qty} value={qty}>
+                              {qty}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="success"
+                          startIcon={<EmailIcon />}
+                          href={generateSingleProductEmail(p, cardQtySelections[p.id] || (getMoqOptions(p)[0] || p.moq || 1))}
+                          sx={{
+                            fontWeight: 600,
+                            textTransform: "none",
+                          }}
+                        >
+                          Request Invoice
+                        </Button>
+                      </Box>
                     </CardActions>
                   </Card>
                 </Grid>
