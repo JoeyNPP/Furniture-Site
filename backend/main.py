@@ -493,10 +493,12 @@ async def import_products(file: UploadFile = File(...), current_user: str = Depe
         "walmart url": "walmart_url",
         "ebay url": "ebay_url",
         "sales per month": "sales_per_month",
-        "net": "net"
+        "net": "net",
+        "out of stock": "out_of_stock"
     }
     float_fields = {"price", "cost", "net", "sales_per_month"}
     int_fields = {"moq", "qty"}
+    bool_fields = {"out_of_stock"}
     conn = get_db_connection()
     cur = conn.cursor()
     inserted = updated = skipped = 0
@@ -523,6 +525,9 @@ async def import_products(file: UploadFile = File(...), current_user: str = Depe
                     record[column] = int(float(value.replace(",", "")))
                 except ValueError:
                     continue
+            elif column in bool_fields:
+                # Handle boolean values: "true", "false", "1", "0", etc.
+                record[column] = value.lower() in ("true", "1", "yes", "y")
             elif column == "offer_date":
                 parsed = None
                 for pattern in ("%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y"):
