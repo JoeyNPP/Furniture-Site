@@ -896,11 +896,7 @@ const InternalProductList = ({ onBack }) => {
     if (Number.isNaN(parsed.getTime())) {
       return value;
     }
-    // Format as MM/DD/YYYY to match upload parser
-    const month = String(parsed.getMonth() + 1).padStart(2, '0');
-    const day = String(parsed.getDate()).padStart(2, '0');
-    const year = parsed.getFullYear();
-    return `${month}/${day}/${year}`;
+    return parsed.toLocaleString("en-US", { timeZone: timezone });
   };
 
   const getDownloadValue = (product, field) => {

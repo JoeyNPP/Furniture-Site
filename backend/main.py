@@ -13,6 +13,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import Optional, List
 import psycopg2
+import pytz
 from psycopg2.extras import RealDictCursor, Json
 from datetime import datetime, timedelta
 import jwt
@@ -305,6 +306,21 @@ async def get_products_by_category(category: str):
 async def create_product(product: Product, current_user: str = Depends(get_current_user)):
     conn = get_db_connection()
     cur = conn.cursor()
+
+    # Use current EST time for offer_date if not provided or if it's a date without time
+    est_tz = pytz.timezone('America/New_York')
+    current_est = datetime.now(est_tz)
+
+    offer_date = product.offer_date
+    if offer_date:
+        # If offer_date is provided but has midnight time (12:00 AM), use current EST time
+        if offer_date.hour == 0 and offer_date.minute == 0 and offer_date.second == 0:
+            # Keep the date but use current time
+            offer_date = est_tz.localize(datetime.combine(offer_date.date(), current_est.time()))
+    else:
+        # If no offer_date provided, use current EST time
+        offer_date = current_est
+
     cur.execute("""
         INSERT INTO products (
           title, category, vendor_id, vendor, price, cost, moq, qty, upc, asin, lead_time,
@@ -317,8 +333,8 @@ async def create_product(product: Product, current_user: str = Depends(get_curre
             product.title, product.category, product.vendor_id, product.vendor, product.price, product.cost,
             product.moq, product.qty, product.upc, product.asin, product.lead_time, product.exp_date, product.fob,
             product.image_url, product.out_of_stock, product.amazon_url, product.walmart_url, product.ebay_url,
-            product.offer_date, product.last_sent, product.sales_per_month, product.net,
-            datetime.now()
+            offer_date, product.last_sent, product.sales_per_month, product.net,
+            current_est
         ))
     product_id = cur.fetchone()['id']
     conn.commit()
@@ -475,6 +491,8 @@ async def import_products(file: UploadFile = File(...), current_user: str = Depe
         raise HTTPException(status_code=400, detail="CSV file is missing headers")
     field_map = {
         "date": "offer_date",
+        "offer date": "offer_date",  # Accept both "date" and "offer date"
+        "last sent": "last_sent",
         "amazon url": "amazon_url",
         "asin": "asin",
         "price": "price",
@@ -528,9 +546,19 @@ async def import_products(file: UploadFile = File(...), current_user: str = Depe
             elif column in bool_fields:
                 # Handle boolean values: "true", "false", "1", "0", etc.
                 record[column] = value.lower() in ("true", "1", "yes", "y")
-            elif column == "offer_date":
+            elif column in ("offer_date", "last_sent"):
                 parsed = None
-                for pattern in ("%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y"):
+                # Try multiple date formats including ones with time
+                patterns = [
+                    "%m/%d/%Y, %I:%M:%S %p",  # 11/21/2025, 12:00:00 AM
+                    "%m/%d/%Y %I:%M:%S %p",   # 11/21/2025 12:00:00 AM
+                    "%m/%d/%Y",               # 11/21/2025
+                    "%Y-%m-%d",               # 2025-11-21
+                    "%m-%d-%Y",               # 11-21-2025
+                    "%Y-%m-%d %H:%M:%S",      # 2025-11-21 00:00:00
+                    "%m/%d/%Y %H:%M:%S",      # 11/21/2025 00:00:00
+                ]
+                for pattern in patterns:
                     try:
                         parsed = datetime.strptime(value, pattern)
                         break

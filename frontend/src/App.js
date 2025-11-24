@@ -24,10 +24,10 @@ function App() {
     () =>
       createTheme({
         palette: {
-          mode: settings.darkMode ? "dark" : "light",
+          mode: settings.theme || "light",
         },
       }),
-    [settings.darkMode]
+    [settings.theme]
   );
 
   return (
