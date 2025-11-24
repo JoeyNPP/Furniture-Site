@@ -65,6 +65,8 @@ const ProductFormDialog = ({ open, mode, initialData, onClose, onSubmit, timezon
         net: initialData.net || "",
       });
     } else {
+      // For new products, default offer_date to today
+      const today = new Date().toISOString().split('T')[0];
       setFormData({
         title: "",
         category: "",
@@ -84,7 +86,7 @@ const ProductFormDialog = ({ open, mode, initialData, onClose, onSubmit, timezon
         amazon_url: "",
         walmart_url: "",
         ebay_url: "",
-        offer_date: "",
+        offer_date: today,
         last_sent: "",
         sales_per_month: "",
         net: "",

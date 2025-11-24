@@ -3,6 +3,9 @@ import csv
 import io
 import re
 import unicodedata
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,9 +23,9 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://159.65.184.143",
-        "http://159.65.184.143:80",
-        "http://159.65.184.143:3000",
+        "http://104.131.49.141",
+        "http://104.131.49.141:80",
+        "http://104.131.49.141:3000",
         "http://localhost",
         "http://localhost:3000",
     ],
@@ -247,6 +250,15 @@ async def get_products(current_user: str = Depends(get_current_user)):
     conn.close()
     return {"products": products}
 
+@app.get("/products/public")
+async def get_public_products():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM products WHERE out_of_stock = FALSE ORDER BY date_added DESC")
+    products = cur.fetchall()
+    cur.close()
+    conn.close()
+    return products
 
 @app.get("/products/category/{category}")
 async def get_products_by_category(category: str):
@@ -607,5 +619,134 @@ async def create_user_settings(settings: UserSettings, current_user: str = Depen
     cur.close()
     conn.close()
     return {"message": "Settings created", "settings": settings.dict()}
+
+
+# Invoice Request Models and Endpoint
+class InvoiceRequest(BaseModel):
+    customer_name: str
+    customer_email: str
+    customer_company: Optional[str] = None
+    customer_phone: Optional[str] = None
+    product_ids: List[int]
+
+
+def send_invoice_email(customer_info: dict, products: list):
+    """Send invoice request email to NPP sales team."""
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+    recipient_email = os.getenv("INVOICE_RECIPIENT", "sales@nppwholesale.com")
+
+    if not smtp_user or not smtp_pass:
+        print("SMTP credentials not configured, skipping email")
+        return False
+
+    # Build product table HTML
+    product_rows = ""
+    for p in products:
+        product_rows += f"""
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;">{p.get('title', 'N/A')}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{p.get('vendor', 'N/A')}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${p.get('price', 0):.2f}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{p.get('moq', 'N/A')}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{p.get('qty', 0)}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{p.get('fob', 'N/A')}</td>
+        </tr>
+        """
+
+    html_body = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; color: #333;">
+        <div style="background: #003087; color: white; padding: 20px; text-align: center;">
+            <h1 style="margin: 0;">New Invoice Request</h1>
+        </div>
+        <div style="padding: 20px;">
+            <h2 style="color: #003087;">Customer Information</h2>
+            <table style="width: 100%; margin-bottom: 20px;">
+                <tr><td><strong>Name:</strong></td><td>{customer_info.get('name', 'N/A')}</td></tr>
+                <tr><td><strong>Email:</strong></td><td>{customer_info.get('email', 'N/A')}</td></tr>
+                <tr><td><strong>Company:</strong></td><td>{customer_info.get('company', 'N/A')}</td></tr>
+                <tr><td><strong>Phone:</strong></td><td>{customer_info.get('phone', 'N/A')}</td></tr>
+            </table>
+
+            <h2 style="color: #003087;">Requested Products ({len(products)} items)</h2>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <thead>
+                    <tr style="background: #003087; color: white;">
+                        <th style="padding: 10px; text-align: left;">Product</th>
+                        <th style="padding: 10px; text-align: left;">Vendor</th>
+                        <th style="padding: 10px; text-align: left;">Price</th>
+                        <th style="padding: 10px; text-align: left;">MOQ</th>
+                        <th style="padding: 10px; text-align: left;">In Stock</th>
+                        <th style="padding: 10px; text-align: left;">FOB</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {product_rows}
+                </tbody>
+            </table>
+
+            <p style="color: #666; font-size: 12px;">
+                This request was submitted on {datetime.now().strftime('%B %d, %Y at %I:%M %p')} via the NPP Live Catalog.
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"Invoice Request from {customer_info.get('name', 'Customer')} - {len(products)} Products"
+    msg["From"] = smtp_user
+    msg["To"] = recipient_email
+    msg["Reply-To"] = customer_info.get('email', smtp_user)
+
+    msg.attach(MIMEText(html_body, "html"))
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, [recipient_email], msg.as_string())
+        return True
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+        return False
+
+
+@app.post("/request-invoice")
+async def request_invoice(request: InvoiceRequest):
+    if not request.product_ids:
+        raise HTTPException(status_code=400, detail="No products selected")
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Fetch the requested products
+    placeholders = ','.join(['%s'] * len(request.product_ids))
+    cur.execute(f"SELECT * FROM products WHERE id IN ({placeholders})", request.product_ids)
+    products = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if not products:
+        raise HTTPException(status_code=404, detail="No products found")
+
+    customer_info = {
+        "name": request.customer_name,
+        "email": request.customer_email,
+        "company": request.customer_company or "Not provided",
+        "phone": request.customer_phone or "Not provided",
+    }
+
+    # Send email
+    email_sent = send_invoice_email(customer_info, products)
+
+    return {
+        "message": "Invoice request submitted successfully",
+        "products_count": len(products),
+        "email_sent": email_sent,
+    }
 
 

@@ -1,6 +1,6 @@
-import jwtDecode from "jwt-decode"; // Compatible with jwt-decode@3.x
+﻿import jwtDecode from "jwt-decode"; // Compatible with jwt-decode@3.x
 
-export const API_BASE_URL = process.env.REACT_APP_API_URL || process.env.REACT_APP_FRONTEND_URL || "http://159.65.184.143:8000";
+export const API_BASE_URL = "/api";
 
 const withAuthHeaders = (token, extra = {}) => ({
   Authorization: `Bearer ${token}`,
@@ -50,6 +50,22 @@ async function fetchProducts() {
     return await response.json();
   } catch (error) {
     console.error("Fetch products error:", error);
+    throw error;
+  }
+}
+
+async function fetchPublicProducts() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/products/public`, {
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Fetch public products error:", error);
     throw error;
   }
 }
@@ -170,7 +186,6 @@ async function fetchProductsByCategory(category) {
   }
 }
 
-
 async function searchProducts(query) {
   const token = requireToken();
   try {
@@ -240,9 +255,34 @@ export async function persistUserSettings(nextSettings) {
   }
 }
 
+async function requestInvoice(customerInfo, productIds) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/request-invoice`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customer_name: customerInfo.name,
+        customer_email: customerInfo.email,
+        customer_company: customerInfo.company,
+        customer_phone: customerInfo.phone,
+        product_ids: productIds,
+      }),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Request invoice error:", error);
+    throw error;
+  }
+}
+
 export {
   login,
   fetchProducts,
+  fetchPublicProducts,
   fetchProductsByCategory,
   createProduct,
   updateProduct,
@@ -250,4 +290,5 @@ export {
   markOutOfStock,
   searchProducts,
   uploadProducts,
+  requestInvoice,
 };

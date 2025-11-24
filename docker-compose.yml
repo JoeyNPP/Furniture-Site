@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   npp_deals-db:
     image: postgres:13
@@ -29,7 +31,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        REACT_APP_FRONTEND_URL: http://159.65.184.143:8000
+        REACT_APP_FRONTEND_URL: http://104.131.49.141:8000
     environment:
       TZ: America/New_York
     ports:
