@@ -203,9 +203,15 @@ const Catalog = () => {
     const moq = parseInt(product.moq) || 1;
     const available = parseInt(product.qty) || 0;
     const maxMultiples = Math.floor(available / moq);
+    const remainder = available % moq;
     const options = [];
+    // Add MOQ multiples (up to 10)
     for (let i = 1; i <= Math.min(maxMultiples, 10); i++) {
       options.push(moq * i);
+    }
+    // If there's a remainder and total qty isn't already in the list, add "all units" option
+    if (remainder > 0 && available > 0 && !options.includes(available)) {
+      options.push(available);
     }
     return options.length > 0 ? options : [moq];
   };
