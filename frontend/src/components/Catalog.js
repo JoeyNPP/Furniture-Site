@@ -47,7 +47,6 @@ const Catalog = () => {
   const [selectedMarketplaces, setSelectedMarketplaces] = useState({});
   const [showInStockOnly, setShowInStockOnly] = useState(true);
   const [selectedForInvoice, setSelectedForInvoice] = useState({}); // {productId: quantity}
-  const [cardQtySelections, setCardQtySelections] = useState({}); // {productId: quantity} for individual card Request Invoice buttons
   const [dealCostRange, setDealCostRange] = useState([0, Infinity]);
 
   // Deal cost preset options
@@ -217,21 +216,20 @@ const Catalog = () => {
     return options.length > 0 ? options : [moq];
   };
 
-  // Generate mailto link for single product
+  // Generate mailto link for single product (same format as multi-product)
   const generateSingleProductEmail = (product, qty) => {
     const totalCost = (parseFloat(product.price) || 0) * qty;
     const asinPart = product.asin ? ` [${product.asin}]` : "";
-    const subject = encodeURIComponent(`Invoice Request: ${product.title}${asinPart}`);
+    const subject = encodeURIComponent(`Invoice Request: 1 Product(s)${asinPart}`);
+
+    const productList =
+      `• ${product.title}\n` +
+      `  ASIN: ${product.asin || "N/A"} | Price: $${product.price} | Qty: ${qty} | Total: $${totalCost.toLocaleString()}`;
+
     const body = encodeURIComponent(
       `Hi NPP Sales Team,\n\n` +
-      `I would like to request an invoice for the following product:\n\n` +
-      `Product: ${product.title}\n` +
-      `ASIN: ${product.asin || "N/A"}\n` +
-      `UPC: ${product.upc || "N/A"}\n` +
-      `Price: $${product.price}\n` +
-      `Qty: ${qty}\n` +
-      `Total: $${totalCost.toLocaleString()}\n` +
-      `FOB: ${product.fob || "N/A"}\n\n` +
+      `I would like to request an invoice for the following 1 product(s):\n\n` +
+      `${productList}\n\n` +
       `Please send me an invoice at your earliest convenience.\n\n` +
       `Thank you!`
     );
@@ -669,33 +667,46 @@ const Catalog = () => {
                           </Button>
                         )}
                       </Box>
-                      <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
-                        <Select
-                          size="small"
-                          value={cardQtySelections[p.id] || (getMoqOptions(p)[0] || p.moq || 1)}
-                          onChange={(e) => setCardQtySelections(prev => ({ ...prev, [p.id]: e.target.value }))}
-                          sx={{ minWidth: 70, height: 32, fontSize: "0.8rem" }}
-                        >
-                          {getMoqOptions(p).map((qty) => (
-                            <MenuItem key={qty} value={qty}>
-                              {qty}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          color="success"
-                          startIcon={<EmailIcon />}
-                          href={generateSingleProductEmail(p, cardQtySelections[p.id] || (getMoqOptions(p)[0] || p.moq || 1))}
-                          sx={{
-                            fontWeight: 600,
-                            textTransform: "none",
-                          }}
-                        >
-                          Request Invoice
-                        </Button>
-                      </Box>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="success"
+                        startIcon={<EmailIcon />}
+                        onClick={() => {
+                          // Add this product to selection with default MOQ qty, then trigger email
+                          const qty = selectedForInvoice[p.id] || p.moq || 1;
+                          const tempSelection = { ...selectedForInvoice, [p.id]: qty };
+                          const selectedIds = Object.keys(tempSelection);
+                          const selectedProducts = products.filter((prod) => selectedIds.includes(String(prod.id)));
+                          const asins = selectedProducts.map((prod) => prod.asin).filter(Boolean).join(", ");
+                          const asinPart = asins ? ` [${asins}]` : "";
+                          const subject = encodeURIComponent(`Invoice Request: ${selectedProducts.length} Product(s)${asinPart}`);
+                          const productList = selectedProducts
+                            .map((prod) => {
+                              const prodQty = tempSelection[prod.id];
+                              const totalCost = (parseFloat(prod.price) || 0) * prodQty;
+                              return (
+                                `• ${prod.title}\n` +
+                                `  ASIN: ${prod.asin || "N/A"} | Price: $${prod.price} | Qty: ${prodQty} | Total: $${totalCost.toLocaleString()}`
+                              );
+                            })
+                            .join("\n\n");
+                          const body = encodeURIComponent(
+                            `Hi NPP Sales Team,\n\n` +
+                            `I would like to request an invoice for the following ${selectedProducts.length} product(s):\n\n` +
+                            `${productList}\n\n` +
+                            `Please send me an invoice at your earliest convenience.\n\n` +
+                            `Thank you!`
+                          );
+                          window.location.href = `mailto:sales@nat-procurement.com?subject=${subject}&body=${body}`;
+                        }}
+                        sx={{
+                          fontWeight: 600,
+                          textTransform: "none",
+                        }}
+                      >
+                        Request Invoice
+                      </Button>
                     </CardActions>
                   </Card>
                 </Grid>
