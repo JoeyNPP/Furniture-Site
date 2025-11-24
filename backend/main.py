@@ -26,6 +26,8 @@ app.add_middleware(
         "http://104.131.49.141",
         "http://104.131.49.141:80",
         "http://104.131.49.141:3000",
+        "https://catalog.nat-procurement.com",
+        "http://catalog.nat-procurement.com",
         "http://localhost",
         "http://localhost:3000",
     ],
