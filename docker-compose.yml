@@ -36,6 +36,9 @@ services:
       TZ: America/New_York
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - npp_deals-backend
     container_name: npp_deals_npp_deals-frontend-1
