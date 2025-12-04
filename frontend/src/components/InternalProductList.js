@@ -63,6 +63,7 @@ const BULK_EDITABLE_FIELDS = [
   { value: "sales_per_month", label: "Sales Per Month" },
   { value: "net", label: "Net" },
   { value: "offer_date", label: "Offer Date" },
+  { value: "out_of_stock", label: "Out of Stock (true/false)" },
   { value: "amazon_url", label: "Amazon URL" },
   { value: "walmart_url", label: "Walmart URL" },
   { value: "ebay_url", label: "eBay URL" },
@@ -118,6 +119,7 @@ const InternalProductList = ({ onBack }) => {
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
   const [downloadSelectedColumns, setDownloadSelectedColumns] = useState(DEFAULT_DOWNLOAD_COLUMNS);
   const [loading, setLoading] = useState(false);
+  const [undoStack, setUndoStack] = useState([]);
   const bulkEditableFields = BULK_EDITABLE_FIELDS;
   const integerFields = INTEGER_FIELDS;
   const decimalFields = DECIMAL_FIELDS;
@@ -454,19 +456,11 @@ const InternalProductList = ({ onBack }) => {
       "FOB",
       "Walmart URL",
       "EBAY URL",
-      "Sales Per Month",
-      "Net",
-      "ROI (%)"
+      "Sales Per Month"
     ]);
     Object.keys(groupedByDate).sort((a, b) => new Date(b) - new Date(a)).forEach((date) => {
       data.push([date]);
       groupedByDate[date].forEach((product) => {
-        const net = Number(product.net);
-        const price = Number(product.price);
-        let roi = "";
-        if (!isNaN(net) && !isNaN(price) && price !== 0) {
-          roi = ((net / price) * 100).toFixed(2);
-        }
         data.push([
           product.amazon_url || "",
           product.asin || "",
@@ -479,9 +473,7 @@ const InternalProductList = ({ onBack }) => {
           product.fob || "",
           product.walmart_url || "",
           product.ebay_url || "",
-          product.sales_per_month || "",
-          product.net || "",
-          roi
+          product.sales_per_month || ""
         ]);
       });
     });
@@ -848,12 +840,109 @@ const InternalProductList = ({ onBack }) => {
     }
     setBulkActionLoading(true);
     try {
+      // Save undo state before making changes
+      const affectedProducts = products.filter((p) => selectedIds.includes(String(p.id)));
+      const undoAction = {
+        type: 'mark_out_of_stock',
+        products: affectedProducts.map((p) => ({
+          id: p.id,
+          out_of_stock: p.out_of_stock,
+        })),
+        timestamp: new Date().toISOString(),
+      };
+
       await Promise.all(selectedIds.map((id) => markOutOfStock(Number(id))));
+
+      // Add to undo stack (keep last 10 operations)
+      setUndoStack((prev) => [...prev.slice(-9), undoAction]);
+
       alert(`Marked ${selectedIds.length} product${selectedIds.length === 1 ? "" : "s"} out of stock.`);
       await loadProducts();
     } catch (error) {
       console.error("Bulk mark out of stock error:", error);
       alert(`Failed to mark selected products out of stock: ${error.message}`);
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkMarkInStock = async () => {
+    if (!selectedIds.length) {
+      alert("Select at least one product to update.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Mark ${selectedIds.length} selected product${selectedIds.length === 1 ? "" : "s"} back in stock?`
+      )
+    ) {
+      return;
+    }
+    setBulkActionLoading(true);
+    try {
+      // Save undo state before making changes
+      const affectedProducts = products.filter((p) => selectedIds.includes(String(p.id)));
+      const undoAction = {
+        type: 'mark_in_stock',
+        products: affectedProducts.map((p) => ({
+          id: p.id,
+          out_of_stock: p.out_of_stock,
+        })),
+        timestamp: new Date().toISOString(),
+      };
+
+      // Mark in stock by updating out_of_stock to false
+      await Promise.all(
+        selectedIds.map((id) =>
+          updateProduct(Number(id), { out_of_stock: false })
+        )
+      );
+
+      // Add to undo stack (keep last 10 operations)
+      setUndoStack((prev) => [...prev.slice(-9), undoAction]);
+
+      alert(`Marked ${selectedIds.length} product${selectedIds.length === 1 ? "" : "s"} back in stock.`);
+      await loadProducts();
+    } catch (error) {
+      console.error("Bulk mark in stock error:", error);
+      alert(`Failed to mark selected products in stock: ${error.message}`);
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (undoStack.length === 0) {
+      alert("Nothing to undo.");
+      return;
+    }
+
+    const lastAction = undoStack[undoStack.length - 1];
+    const actionDesc = lastAction.type === 'mark_out_of_stock'
+      ? 'marking products out of stock'
+      : 'marking products in stock';
+
+    if (!window.confirm(`Undo ${actionDesc} for ${lastAction.products.length} product(s)?`)) {
+      return;
+    }
+
+    setBulkActionLoading(true);
+    try {
+      // Restore original values
+      await Promise.all(
+        lastAction.products.map((p) =>
+          updateProduct(p.id, { out_of_stock: p.out_of_stock })
+        )
+      );
+
+      // Remove from undo stack
+      setUndoStack((prev) => prev.slice(0, -1));
+
+      alert(`Undid ${actionDesc}.`);
+      await loadProducts();
+    } catch (error) {
+      console.error("Undo error:", error);
+      alert(`Failed to undo: ${error.message}`);
     } finally {
       setBulkActionLoading(false);
     }
@@ -979,7 +1068,7 @@ const InternalProductList = ({ onBack }) => {
     "Electronics",
     "Health & Household",
     "Home & Kitchen",
-    "Industrial & Industrial",
+    "Industrial & Scientific",
     "Kitchen & Dining",
     "Musical Instruments",
     "Patio, Lawn & Garden",
@@ -1182,7 +1271,15 @@ const InternalProductList = ({ onBack }) => {
                   onClick={handleBulkMarkOutOfStock}
                   disabled={!selectedIds.length || bulkActionLoading}
                 >
-                  Mark Selected Out of Stock
+                  Mark Out of Stock
+                </Button>
+                <Button
+                  variant="contained"
+                  color="success"
+                  onClick={handleBulkMarkInStock}
+                  disabled={!selectedIds.length || bulkActionLoading}
+                >
+                  Mark In Stock
                 </Button>
                 <Button
                   variant="contained"
@@ -1191,6 +1288,14 @@ const InternalProductList = ({ onBack }) => {
                   disabled={!selectedIds.length || bulkActionLoading}
                 >
                   Download Selected
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={handleUndo}
+                  disabled={undoStack.length === 0 || bulkActionLoading}
+                >
+                  Undo ({undoStack.length})
                 </Button>
               </Stack>
             </Stack>

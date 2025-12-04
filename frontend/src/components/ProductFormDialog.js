@@ -148,7 +148,7 @@ const ProductFormDialog = ({ open, mode, initialData, onClose, onSubmit, timezon
     "Electronics",
     "Health & Household",
     "Home & Kitchen",
-    "Industrial & Industrial",
+    "Industrial & Scientific",
     "Kitchen & Dining",
     "Musical Instruments",
     "Patio, Lawn & Garden",
