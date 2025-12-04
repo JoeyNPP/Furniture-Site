@@ -288,58 +288,103 @@ const Catalog = () => {
     <ThemeProvider theme={theme}>
       <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh", bgcolor: "#F5F7FA" }}>
         {/* Header */}
-        <AppBar position="sticky" sx={{ bgcolor: "#003087", py: { xs: 1, md: 2 }, boxShadow: 3 }}>
-          <Toolbar sx={{ justifyContent: "space-between", minHeight: { xs: 64, md: 80 } }}>
-            {/* Mobile menu + Logo on the left */}
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <AppBar position="sticky" sx={{ bgcolor: "white", py: { xs: 1, md: 1.5 }, boxShadow: 2 }}>
+          <Toolbar sx={{ justifyContent: "space-between", minHeight: { xs: 64, md: 80 }, gap: 2 }}>
+            {/* Left: Mobile menu + Logo + Home Link */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1, md: 2 } }}>
               {isMobile && (
-                <IconButton color="inherit" onClick={() => setDrawerOpen(true)}>
+                <IconButton sx={{ color: "#003087" }} onClick={() => setDrawerOpen(true)}>
                   <MenuIcon />
                 </IconButton>
               )}
               <Box
-                component="img"
-                src="/assets/logo.png"
-                alt="NPP Deals"
-                sx={{
-                  height: { xs: 56, sm: 64, md: 80 },
-                  maxWidth: "320px",
-                  objectFit: "contain",
-                }}
-              />
+                component="a"
+                href="https://nat-procurement.com/"
+                sx={{ display: "flex", alignItems: "center", textDecoration: "none" }}
+              >
+                <Box
+                  component="img"
+                  src="/assets/logo.png"
+                  alt="NPP Deals"
+                  sx={{
+                    height: { xs: 48, sm: 56, md: 72 },
+                    maxWidth: "280px",
+                    objectFit: "contain",
+                  }}
+                />
+              </Box>
             </Box>
 
-            {/* Title in the center */}
-            <Typography
-              variant="h5"
-              sx={{
-                color: "white",
-                fontWeight: 700,
-                position: "absolute",
-                left: "50%",
-                transform: "translateX(-50%)",
-                whiteSpace: "nowrap",
-                display: { xs: "none", sm: "block" },
-              }}
-            >
-              LIVE CATALOG
-            </Typography>
-
-            {/* Request Invoice button */}
-            {selectedCount > 0 ? (
-              <Button
-                variant="contained"
-                color="success"
-                size="large"
-                startIcon={<ShoppingCartIcon />}
-                onClick={handleRequestInvoice}
-                sx={{ fontWeight: 600 }}
+            {/* Center: Title + Request Invoice Button */}
+            <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+              <Typography
+                variant="h5"
+                sx={{
+                  color: "#003087",
+                  fontWeight: 700,
+                  whiteSpace: "nowrap",
+                  fontSize: { xs: "1rem", sm: "1.25rem", md: "1.5rem" },
+                }}
               >
-                Request Invoice ({selectedCount})
-              </Button>
-            ) : (
-              <Box sx={{ width: { xs: 0, md: 200 } }} />
-            )}
+                LIVE CATALOG
+              </Typography>
+              {selectedCount > 0 && (
+                <Button
+                  variant="contained"
+                  color="success"
+                  size="large"
+                  startIcon={<ShoppingCartIcon />}
+                  onClick={handleRequestInvoice}
+                  sx={{ fontWeight: 600, minWidth: { xs: "auto", sm: 180 } }}
+                >
+                  <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+                    Request Invoice ({selectedCount})
+                  </Box>
+                  <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>
+                    ({selectedCount})
+                  </Box>
+                </Button>
+              )}
+            </Box>
+
+            {/* Right: Contact Info */}
+            <Box sx={{ display: { xs: "none", md: "flex" }, flexDirection: "column", alignItems: "flex-end", gap: 0.5, minWidth: 180 }}>
+              <Typography
+                sx={{
+                  color: "#003087",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                }}
+              >
+                Contact Us
+              </Typography>
+              <Typography
+                component="a"
+                href="mailto:sales@nat-procurement.com"
+                sx={{
+                  color: "#666",
+                  fontSize: "0.875rem",
+                  textDecoration: "none",
+                  "&:hover": { color: "#003087", textDecoration: "underline" },
+                }}
+              >
+                sales@nat-procurement.com
+              </Typography>
+              <Typography
+                component="a"
+                href="tel:+16177802033"
+                sx={{
+                  color: "#666",
+                  fontSize: "0.875rem",
+                  textDecoration: "none",
+                  "&:hover": { color: "#003087", textDecoration: "underline" },
+                }}
+              >
+                (617) 780-2033
+              </Typography>
+            </Box>
           </Toolbar>
         </AppBar>
 
