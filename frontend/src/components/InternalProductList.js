@@ -24,6 +24,7 @@ import {
   DialogActions,
   useMediaQuery,
   useTheme,
+  Divider,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import SettingsDialog from "./SettingsDialog";
@@ -102,6 +103,17 @@ const InternalProductList = ({ onBack }) => {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [vendorFilter, setVendorFilter] = useState("");
   const [stockFilter, setStockFilter] = useState("in");
+  const [dealCostRange, setDealCostRange] = useState([0, Infinity]);
+
+  // Deal Cost presets (matching catalog)
+  const dealCostPresets = [
+    { label: "All Deals", range: [0, Infinity] },
+    { label: "$0-$1K", range: [0, 1000] },
+    { label: "$1K-$3K", range: [1000, 3000] },
+    { label: "$3K-$5K", range: [3000, 5000] },
+    { label: "$5K-$10K", range: [5000, 10000] },
+    { label: "$10K+", range: [10000, Infinity] },
+  ];
   const [pageSize, setPageSize] = useState(50);
   const [columnVisibilityModel, setColumnVisibilityModel] = useState(settings.columnVisibility || {});
   const [sortModel, setSortModel] = useState([]);
@@ -257,6 +269,14 @@ const InternalProductList = ({ onBack }) => {
     localStorage.setItem("sortModel", JSON.stringify(newSortModel));
   };
 
+  // Helper to calculate deal cost (matching catalog)
+  const getDealCost = (p) => {
+    const price = parseFloat(p.price) || 0;
+    const moq = parseInt(p.moq, 10) || 0;
+    if (!price || !moq) return null;
+    return price * moq;
+  };
+
   const applyFilters = () => {
     let temp = [...products];
     if (categoryFilter) {
@@ -274,6 +294,14 @@ const InternalProductList = ({ onBack }) => {
     } else if (stockFilter === "out") {
       temp = temp.filter((p) => p.out_of_stock === true);
     }
+    // Deal Cost filter
+    if (dealCostRange[0] > 0 || dealCostRange[1] < Infinity) {
+      temp = temp.filter((p) => {
+        const dealCost = getDealCost(p);
+        if (dealCost === null) return false;
+        return dealCost >= dealCostRange[0] && dealCost <= dealCostRange[1];
+      });
+    }
     setFilteredProducts(temp);
   };
 
@@ -281,6 +309,7 @@ const InternalProductList = ({ onBack }) => {
     setCategoryFilter("");
     setVendorFilter("");
     setStockFilter("in");
+    setDealCostRange([0, Infinity]);
     setFilteredProducts(products.filter((p) => p.out_of_stock === false));
   };
 
@@ -1097,98 +1126,169 @@ const InternalProductList = ({ onBack }) => {
         open={isMobile ? drawerOpen : true}
         onClose={() => setDrawerOpen(false)}
         sx={{
-          width: drawerWidth,
+          width: isMobile ? 150 : 200,
           flexShrink: 0,
           "& .MuiDrawer-paper": {
-            width: drawerWidth,
+            width: isMobile ? 150 : 200,
             boxSizing: "border-box",
+            p: 2,
+            bgcolor: settings.theme === "dark" ? "#1e1e1e" : "white",
+            borderRight: `1px solid ${settings.theme === "dark" ? "#333" : "#e0e0e0"}`,
           },
         }}
       >
-        <Box sx={{ p: 2 }}>
+        {isMobile && (
+          <IconButton onClick={() => setDrawerOpen(false)} sx={{ alignSelf: "flex-end", mb: 1 }}>
+            ✕
+          </IconButton>
+        )}
+
+        {/* Navigation Buttons */}
+        <Stack spacing={1} sx={{ mb: 3 }}>
           {onBack && (
-            <Button variant="contained" onClick={onBack} sx={{ mb: 2 }}>
+            <Button variant="contained" onClick={onBack} fullWidth>
               Back to Public View
             </Button>
           )}
-          <Button variant="contained" color="secondary" onClick={handleLogout} sx={{ mb: 2 }}>
+          <Button variant="contained" color="secondary" onClick={handleLogout} fullWidth>
             Logout
           </Button>
-          <Typography variant="h6" gutterBottom>
-            Filters & Actions
-          </Typography>
-          <Stack spacing={1} sx={{ mb: 2 }}>
-            <FormControl size="small" fullWidth>
-              <InputLabel>Category</InputLabel>
-              <Select
-                value={categoryFilter}
-                label="Category"
-                onChange={(e) => setCategoryFilter(e.target.value)}
+        </Stack>
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Deal Cost Filter */}
+        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: settings.theme === "dark" ? "#90caf9" : "#003087" }}>
+          Deal Cost (per MOQ)
+        </Typography>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
+          {dealCostPresets.map(({ label, range }) => {
+            const isActive =
+              dealCostRange[0] === range[0] &&
+              (range[1] === Infinity ? dealCostRange[1] === Infinity : dealCostRange[1] === range[1]);
+            return (
+              <Button
+                key={label}
+                variant={isActive ? "contained" : "outlined"}
+                color={label === "All Deals" ? "secondary" : "primary"}
+                size="small"
+                onClick={() => setDealCostRange(range)}
+                sx={{ minWidth: 90 }}
               >
-                <MenuItem value="">(All)</MenuItem>
-                {allCategories.map((cat) => (
-                  <MenuItem key={cat} value={cat}>
-                    {cat}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField
-              fullWidth
-              margin="dense"
-              label="Vendor"
-              name="vendor"
-              value={vendorFilter}
-              onChange={(e) => setVendorFilter(e.target.value)}
-              placeholder="Enter Vendor Name (e.g., Vendor A)"
-            />
-            <FormControl size="small" fullWidth>
-              <InputLabel>Stock Status</InputLabel>
-              <Select
-                value={stockFilter}
-                label="Stock Status"
-                onChange={(e) => setStockFilter(e.target.value)}
-              >
-                <MenuItem value="all">All</MenuItem>
-                <MenuItem value="in">In Stock</MenuItem>
-                <MenuItem value="out">Out of Stock</MenuItem>
-              </Select>
-            </FormControl>
-            <Button variant="contained" onClick={applyFilters}>
-              Apply Filters
-            </Button>
-            <Button variant="outlined" onClick={resetFilters}>
-              Reset Filters
-            </Button>
-          </Stack>
-          <Stack spacing={1}>
-            <Button variant="contained" onClick={handleAddClick}>
-              Add Product
-            </Button>
-            <Button
-              variant="contained"
-              color="info"
-              onClick={() => setCustomizeDialogOpen(true)}
-            >
-              Customize Columns
-            </Button>
-            <Button variant="contained" color="secondary" onClick={handleUploadClick} disabled={uploading}>
-              {uploading ? "Uploading..." : "Upload CSV"}
-            </Button>
-            <Button variant="contained" color="primary" onClick={handleDownloadInventory}>
-              Download Inventory
-            </Button>
-            <Button variant="contained" color="success" onClick={handleSendIndividualEmails}>
-              Send Individual Emails
-            </Button>
-            <Button variant="contained" color="success" onClick={handleSendGroupEmail}>
-              Send Group Email
-            </Button>
-            <Button variant="contained" color="primary" onClick={() => setSettingsDialogOpen(true)}>
-              Display & Settings
-            </Button>
-          </Stack>
+                {label}
+              </Button>
+            );
+          })}
         </Box>
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Category Filter */}
+        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: settings.theme === "dark" ? "#90caf9" : "#003087" }}>
+          Category
+        </Typography>
+        <FormControl size="small" fullWidth sx={{ mb: 2 }}>
+          <InputLabel>Select Category</InputLabel>
+          <Select
+            value={categoryFilter}
+            label="Select Category"
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <MenuItem value="">(All)</MenuItem>
+            {allCategories.map((cat) => (
+              <MenuItem key={cat} value={cat}>
+                {cat}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Vendor Filter */}
+        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: settings.theme === "dark" ? "#90caf9" : "#003087" }}>
+          Vendor
+        </Typography>
+        <TextField
+          fullWidth
+          size="small"
+          label="Vendor Name"
+          value={vendorFilter}
+          onChange={(e) => setVendorFilter(e.target.value)}
+          placeholder="e.g., Vendor A"
+          sx={{ mb: 2 }}
+        />
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Stock Status Filter */}
+        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: settings.theme === "dark" ? "#90caf9" : "#003087" }}>
+          Stock Status
+        </Typography>
+        <FormControl size="small" fullWidth sx={{ mb: 2 }}>
+          <InputLabel>Select Status</InputLabel>
+          <Select
+            value={stockFilter}
+            label="Select Status"
+            onChange={(e) => setStockFilter(e.target.value)}
+          >
+            <MenuItem value="all">All</MenuItem>
+            <MenuItem value="in">In Stock</MenuItem>
+            <MenuItem value="out">Out of Stock</MenuItem>
+          </Select>
+        </FormControl>
+
+        {/* Filter Action Buttons */}
+        <Stack spacing={1} sx={{ mb: 3 }}>
+          <Button variant="contained" onClick={applyFilters} fullWidth>
+            Apply Filters
+          </Button>
+          <Button variant="outlined" onClick={resetFilters} fullWidth>
+            Reset Filters
+          </Button>
+        </Stack>
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Action Buttons */}
+        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: settings.theme === "dark" ? "#90caf9" : "#003087" }}>
+          Actions
+        </Typography>
+        <Stack spacing={1}>
+          <Button variant="contained" onClick={handleAddClick} fullWidth>
+            Add Product
+          </Button>
+          <Button
+            variant="contained"
+            color="info"
+            onClick={() => setCustomizeDialogOpen(true)}
+            fullWidth
+          >
+            Customize Columns
+          </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleUploadClick}
+            disabled={uploading}
+            fullWidth
+          >
+            {uploading ? "Uploading..." : "Upload CSV"}
+          </Button>
+          <Button variant="contained" color="primary" onClick={handleDownloadInventory} fullWidth>
+            Download Inventory
+          </Button>
+          <Button variant="contained" color="success" onClick={handleSendIndividualEmails} fullWidth>
+            Send Individual Emails
+          </Button>
+          <Button variant="contained" color="success" onClick={handleSendGroupEmail} fullWidth>
+            Send Group Email
+          </Button>
+          <Button variant="contained" color="primary" onClick={() => setSettingsDialogOpen(true)} fullWidth>
+            Display & Settings
+          </Button>
+        </Stack>
+
         <input
           type="file"
           accept=".csv"
