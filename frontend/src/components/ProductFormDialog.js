@@ -10,7 +10,10 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Alert,
+  Box,
 } from "@mui/material";
+import { checkDuplicate } from "../api";
 
 const ProductFormDialog = ({ open, mode, initialData, onClose, onSubmit, timezone }) => {
   const [formData, setFormData] = useState({
@@ -37,6 +40,7 @@ const ProductFormDialog = ({ open, mode, initialData, onClose, onSubmit, timezon
     sales_per_month: "",
     net: "",
   });
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
 
   useEffect(() => {
     if (initialData) {
@@ -100,7 +104,7 @@ const ProductFormDialog = ({ open, mode, initialData, onClose, onSubmit, timezon
     }
   }, [open]);
 
-  const handleChange = (e) => {
+  const handleChange = async (e) => {
     const { name, value, type, checked } = e.target;
     let newValue = type === "checkbox" ? checked : value;
     // Handle numeric fields
@@ -117,6 +121,26 @@ const ProductFormDialog = ({ open, mode, initialData, onClose, onSubmit, timezon
     };
     setFormData(newFormData);
     console.log(`Form field updated: ${name} = ${newValue}`);
+
+    // Check for duplicates when ASIN or UPC is changed (only for new products)
+    if (mode === "add" && (name === "asin" || name === "upc") && value.trim()) {
+      try {
+        const asinToCheck = name === "asin" ? value : newFormData.asin;
+        const upcToCheck = name === "upc" ? value : newFormData.upc;
+        const result = await checkDuplicate(asinToCheck, upcToCheck);
+        if (result.duplicate && result.products.length > 0) {
+          setDuplicateWarning({
+            field: name.toUpperCase(),
+            value: value,
+            products: result.products
+          });
+        } else {
+          setDuplicateWarning(null);
+        }
+      } catch (error) {
+        console.error("Error checking for duplicates:", error);
+      }
+    }
   };
 
   const handleSubmit = (e) => {
@@ -167,6 +191,26 @@ const ProductFormDialog = ({ open, mode, initialData, onClose, onSubmit, timezon
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>{mode === "add" ? "Add Product" : "Edit Product"}</DialogTitle>
       <DialogContent>
+        {duplicateWarning && (
+          <Alert severity="warning" sx={{ mt: 2, mb: 2 }} onClose={() => setDuplicateWarning(null)}>
+            <Box>
+              <strong>Possible Duplicate Detected!</strong>
+              <Box sx={{ mt: 1 }}>
+                {duplicateWarning.field} "{duplicateWarning.value}" already exists in:
+              </Box>
+              {duplicateWarning.products.map((product) => (
+                <Box key={product.id} sx={{ mt: 1, ml: 2, fontSize: '0.9em' }}>
+                  • {product.title} {product.vendor ? `(${product.vendor})` : ''}
+                  {product.asin && ` - ASIN: ${product.asin}`}
+                  {product.upc && ` - UPC: ${product.upc}`}
+                </Box>
+              ))}
+              <Box sx={{ mt: 1, fontStyle: 'italic' }}>
+                Consider updating the existing product instead of creating a duplicate.
+              </Box>
+            </Box>
+          </Alert>
+        )}
         <form onSubmit={handleSubmit} style={{ marginTop: 16 }}>
           <TextField
             fullWidth

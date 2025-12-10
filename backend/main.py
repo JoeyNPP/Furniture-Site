@@ -302,6 +302,32 @@ async def get_products_by_category(category: str):
     ]
     return {"category": display_category, "products": simplified}
 
+@app.get("/products/check-duplicate")
+async def check_duplicate(asin: Optional[str] = None, upc: Optional[str] = None, current_user: str = Depends(get_current_user)):
+    """Check if a product with the given ASIN or UPC already exists"""
+    if not asin and not upc:
+        return {"duplicate": False, "products": []}
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    duplicates = []
+    if asin and asin.strip():
+        cur.execute("SELECT id, title, asin, upc, vendor FROM products WHERE asin = %s AND asin != ''", (asin.strip(),))
+        duplicates.extend(cur.fetchall())
+
+    if upc and upc.strip():
+        cur.execute("SELECT id, title, asin, upc, vendor FROM products WHERE upc = %s AND upc != ''", (upc.strip(),))
+        upc_dups = cur.fetchall()
+        # Avoid adding duplicates if same product matched by both ASIN and UPC
+        existing_ids = {d['id'] for d in duplicates}
+        duplicates.extend([d for d in upc_dups if d['id'] not in existing_ids])
+
+    cur.close()
+    conn.close()
+
+    return {"duplicate": len(duplicates) > 0, "products": duplicates}
+
 @app.post("/products")
 async def create_product(product: Product, current_user: str = Depends(get_current_user)):
     conn = get_db_connection()

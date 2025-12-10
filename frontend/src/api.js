@@ -203,6 +203,26 @@ async function searchProducts(query) {
   }
 }
 
+async function checkDuplicate(asin, upc) {
+  const token = requireToken();
+  try {
+    const params = new URLSearchParams();
+    if (asin) params.append("asin", asin);
+    if (upc) params.append("upc", upc);
+    const response = await fetch(`${API_BASE_URL}/products/check-duplicate?${params}`, {
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Check duplicate error:", error);
+    throw error;
+  }
+}
+
 export async function fetchUserSettings() {
   const token = localStorage.getItem("token");
   if (!token) {
@@ -291,4 +311,5 @@ export {
   searchProducts,
   uploadProducts,
   requestInvoice,
+  checkDuplicate,
 };

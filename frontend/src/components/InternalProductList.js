@@ -30,6 +30,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import SettingsDialog from "./SettingsDialog";
 import ProductFormDialog from "./ProductFormDialog";
 import CustomizeColumnsDialog from "./CustomizeColumnsDialog";
+import VendorPerformance from "./VendorPerformance";
 import { fetchProducts, createProduct, updateProduct, deleteProduct, markOutOfStock, searchProducts, uploadProducts } from "../api";
 import { sendIndividualEmails, sendGroupEmail } from "../emailSender";
 import * as XLSX from "xlsx";
@@ -99,11 +100,13 @@ const InternalProductList = ({ onBack }) => {
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [showVendorPerformance, setShowVendorPerformance] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [vendorFilter, setVendorFilter] = useState("");
   const [stockFilter, setStockFilter] = useState("in");
   const [dealCostRange, setDealCostRange] = useState([0, Infinity]);
+  const [expirationFilter, setExpirationFilter] = useState("all"); // all, expiring, expired
 
   // Deal Cost presets (matching catalog)
   const dealCostPresets = [
@@ -277,6 +280,37 @@ const InternalProductList = ({ onBack }) => {
     return price * moq;
   };
 
+  // Helper to parse expiration date (format: "6/27" means June 2027)
+  const parseExpDate = (exp_date) => {
+    if (!exp_date || typeof exp_date !== 'string') return null;
+    const parts = exp_date.trim().split('/');
+    if (parts.length !== 2) return null;
+    const month = parseInt(parts[0], 10);
+    const year = parseInt(parts[1], 10);
+    if (isNaN(month) || isNaN(year)) return null;
+    // If year is 2 digits, assume 20XX
+    const fullYear = year < 100 ? 2000 + year : year;
+    // Create date at end of month
+    return new Date(fullYear, month, 0); // Day 0 = last day of previous month
+  };
+
+  // Helper to get expiration status
+  const getExpirationStatus = (exp_date) => {
+    const expDate = parseExpDate(exp_date);
+    if (!expDate) return null;
+
+    const now = new Date();
+    const sixMonthsFromNow = new Date();
+    sixMonthsFromNow.setMonth(now.getMonth() + 6);
+
+    if (expDate < now) {
+      return 'expired'; // Red
+    } else if (expDate < sixMonthsFromNow) {
+      return 'expiring-soon'; // Yellow
+    }
+    return 'valid'; // No badge
+  };
+
   const applyFilters = () => {
     let temp = [...products];
     if (categoryFilter) {
@@ -302,6 +336,12 @@ const InternalProductList = ({ onBack }) => {
         return dealCost >= dealCostRange[0] && dealCost <= dealCostRange[1];
       });
     }
+    // Expiration filter
+    if (expirationFilter === "expiring") {
+      temp = temp.filter((p) => getExpirationStatus(p.exp_date) === "expiring-soon");
+    } else if (expirationFilter === "expired") {
+      temp = temp.filter((p) => getExpirationStatus(p.exp_date) === "expired");
+    }
     setFilteredProducts(temp);
   };
 
@@ -310,6 +350,7 @@ const InternalProductList = ({ onBack }) => {
     setVendorFilter("");
     setStockFilter("in");
     setDealCostRange([0, Infinity]);
+    setExpirationFilter("all");
     setFilteredProducts(products.filter((p) => p.out_of_stock === false));
   };
 
@@ -317,16 +358,79 @@ const InternalProductList = ({ onBack }) => {
     setSelectedIds(newSelection);
   };
 
-  const handleSendIndividualEmails = async () => {
+  const formatProductForWhatsApp = (product) => {
+    const lines = [];
+
+    // Amazon URL (required)
+    if (product.amazon_url) {
+      lines.push(product.amazon_url);
+    }
+
+    // Price (required)
+    if (product.price) {
+      lines.push(`$${product.price}`);
+    }
+
+    // MOQ and QTY logic
+    const hasMOQ = product.moq && product.moq > 0;
+    const hasQTY = product.qty && product.qty > 0;
+
+    if (hasMOQ && hasQTY) {
+      // Both MOQ and QTY available
+      lines.push(`MOQ ${product.moq}`);
+      lines.push(`QTY ${product.qty}`);
+    } else if (hasQTY && !hasMOQ) {
+      // Only QTY - show as "take all"
+      lines.push(`${product.qty} take all`);
+    } else if (hasMOQ && !hasQTY) {
+      // Only MOQ
+      lines.push(`MOQ ${product.moq}`);
+    }
+
+    // UPC
+    if (product.upc) {
+      lines.push(`UPC: ${product.upc}`);
+    }
+
+    // Exp Date
+    if (product.exp_date) {
+      lines.push(`Exp Date: ${product.exp_date}`);
+    }
+
+    // FOB
+    if (product.fob) {
+      lines.push(`FOB: ${product.fob}`);
+    }
+
+    // Lead Time
+    if (product.lead_time) {
+      lines.push(product.lead_time);
+    }
+
+    return lines.join('\n');
+  };
+
+  const handleSendWhatsApp = () => {
     const selectedProducts = filteredProducts.filter((p) =>
       selectedIds.includes(String(p.id))
     );
     if (!selectedProducts.length) {
-      alert("No products selected for individual email.");
+      alert("No products selected for WhatsApp.");
       return;
     }
-    await sendIndividualEmails(selectedProducts);
-    loadProducts();
+
+    // Format all selected products
+    const formattedProducts = selectedProducts.map(formatProductForWhatsApp);
+    const whatsappMessage = formattedProducts.join('\n\n');
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(whatsappMessage).then(() => {
+      alert(`Copied ${selectedProducts.length} product(s) to clipboard!\n\nYou can now paste this into WhatsApp.`);
+    }).catch((err) => {
+      console.error('Failed to copy to clipboard:', err);
+      // Fallback: show the text in an alert
+      alert('Message formatted for WhatsApp:\n\n' + whatsappMessage);
+    });
   };
 
   const handleSendGroupEmail = async () => {
@@ -581,7 +685,38 @@ const InternalProductList = ({ onBack }) => {
     { field: "upc", headerName: "UPC", width: 120 * (settings.textScale || 1) },
     { field: "asin", headerName: "ASIN", width: 120 * (settings.textScale || 1) },
     { field: "lead_time", headerName: "Lead Time", width: 120 * (settings.textScale || 1) },
-    { field: "exp_date", headerName: "Exp Date", width: 120 * (settings.textScale || 1) },
+    {
+      field: "exp_date",
+      headerName: "Exp Date",
+      width: 150 * (settings.textScale || 1),
+      renderCell: (params) => {
+        const status = getExpirationStatus(params.value);
+        if (!status || status === 'valid') {
+          return params.value || '';
+        }
+        const bgColor = status === 'expired' ? '#ffebee' : '#fff9c4';
+        const textColor = status === 'expired' ? '#c62828' : '#f57f17';
+        const label = status === 'expired' ? 'EXPIRED' : 'EXPIRING SOON';
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <span>{params.value}</span>
+            <Box
+              sx={{
+                bgcolor: bgColor,
+                color: textColor,
+                px: 0.8,
+                py: 0.3,
+                borderRadius: 1,
+                fontSize: '0.7em',
+                fontWeight: 600
+              }}
+            >
+              {label}
+            </Box>
+          </Box>
+        );
+      }
+    },
     { field: "fob", headerName: "FOB", width: 100 * (settings.textScale || 1) },
     { field: "image_url", headerName: "Image URL", width: 200 * (settings.textScale || 1) },
     { field: "out_of_stock", headerName: "Out of Stock", width: 110 * (settings.textScale || 1), type: "boolean" },
@@ -1119,6 +1254,11 @@ const InternalProductList = ({ onBack }) => {
     navigate("/login");
   };
 
+  // If vendor performance view is active, show that instead
+  if (showVendorPerformance) {
+    return <VendorPerformance onBack={() => setShowVendorPerformance(false)} />;
+  }
+
   return (
     <Box sx={{ display: "flex" }}>
       <Drawer
@@ -1238,6 +1378,25 @@ const InternalProductList = ({ onBack }) => {
           </Select>
         </FormControl>
 
+        <Divider sx={{ my: 2 }} />
+
+        {/* Expiration Filter */}
+        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: settings.theme === "dark" ? "#90caf9" : "#003087" }}>
+          Expiration Status
+        </Typography>
+        <FormControl size="small" fullWidth sx={{ mb: 2 }}>
+          <InputLabel>Select Status</InputLabel>
+          <Select
+            value={expirationFilter}
+            label="Select Status"
+            onChange={(e) => setExpirationFilter(e.target.value)}
+          >
+            <MenuItem value="all">All</MenuItem>
+            <MenuItem value="expiring">Expiring Soon (6 months)</MenuItem>
+            <MenuItem value="expired">Expired</MenuItem>
+          </Select>
+        </FormControl>
+
         {/* Filter Action Buttons */}
         <Stack spacing={1} sx={{ mb: 3 }}>
           <Button variant="contained" onClick={applyFilters} fullWidth>
@@ -1260,6 +1419,14 @@ const InternalProductList = ({ onBack }) => {
           </Button>
           <Button
             variant="contained"
+            color="secondary"
+            onClick={() => setShowVendorPerformance(true)}
+            fullWidth
+          >
+            View Vendor Performance
+          </Button>
+          <Button
+            variant="contained"
             color="info"
             onClick={() => setCustomizeDialogOpen(true)}
             fullWidth
@@ -1278,8 +1445,8 @@ const InternalProductList = ({ onBack }) => {
           <Button variant="contained" color="primary" onClick={handleDownloadInventory} fullWidth>
             Download Inventory
           </Button>
-          <Button variant="contained" color="success" onClick={handleSendIndividualEmails} fullWidth>
-            Send Individual Emails
+          <Button variant="contained" color="success" onClick={handleSendWhatsApp} fullWidth>
+            Send WhatsApp
           </Button>
           <Button variant="contained" color="success" onClick={handleSendGroupEmail} fullWidth>
             Send Group Email
