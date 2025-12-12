@@ -123,6 +123,9 @@ def init_db():
         except Exception:
             pass  # Column might already exist
 
+    # Commit table structure changes before attempting migrations
+    conn.commit()
+
     # Migrate data from asin to sku if asin column exists and sku is empty
     try:
         cur.execute("""
@@ -136,7 +139,6 @@ def init_db():
     except Exception as e:
         conn.rollback()  # Rollback failed transaction so subsequent queries work
         print(f"SKU migration note: {e}")
-        pass  # asin column might not exist in new databases
     # Enhanced users table with roles and metadata
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
