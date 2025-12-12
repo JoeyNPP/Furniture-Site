@@ -30,8 +30,14 @@ const Login = () => {
   return (
     <Container maxWidth="xs">
       <Box sx={{ mt: 8, display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <Typography component="h1" variant="h5">
-          Sign in
+        <Box
+          component="img"
+          src="/assets/logo.png"
+          alt="NPP Office Furniture"
+          sx={{ height: 80, mb: 2, objectFit: "contain" }}
+        />
+        <Typography component="h1" variant="h5" sx={{ color: "#003087", fontWeight: 600 }}>
+          Admin Login
         </Typography>
         <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
           <TextField

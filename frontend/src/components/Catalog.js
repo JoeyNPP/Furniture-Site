@@ -26,17 +26,33 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Slider,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Badge,
+  Tooltip,
 } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import MenuIcon from "@mui/icons-material/Menu";
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import EmailIcon from "@mui/icons-material/Email";
-import { fetchPublicProducts } from "../api";
+import ClearIcon from "@mui/icons-material/Clear";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import FilterListIcon from "@mui/icons-material/FilterList";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import { fetchPublicProducts, fetchProductFilters } from "../api";
 import { theme } from "../theme";
+import ProductImageGallery from "./ProductImageGallery";
+import ProductDetailModal from "./ProductDetailModal";
+
+const DRAWER_WIDTH = 280;
 
 const Catalog = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [drawerOpen, setDrawerOpen] = useState(!isMobile);
+  const [filterPanelOpen, setFilterPanelOpen] = useState(true); // For desktop toggle
 
   const [products, setProducts] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -44,36 +60,66 @@ const Catalog = () => {
   const [search, setSearch] = useState("");
   const [selectedCategories, setSelectedCategories] = useState({});
   const [selectedFobs, setSelectedFobs] = useState({});
-  const [selectedMarketplaces, setSelectedMarketplaces] = useState({});
   const [showInStockOnly, setShowInStockOnly] = useState(true);
   const [selectedForInvoice, setSelectedForInvoice] = useState({}); // {productId: quantity}
-  const [dealCostRange, setDealCostRange] = useState([0, Infinity]);
 
-  // Deal cost preset options
-  const dealCostPresets = [
-    { label: "All Deals", range: [0, Infinity] },
-    { label: "Under $1K", range: [0, 1000] },
-    { label: "$1K – $2.5K", range: [1000, 2500] },
-    { label: "$2.5K – $5K", range: [2500, 5000] },
-    { label: "$5K – $10K", range: [5000, 10000] },
-    { label: "$10K+", range: [10000, Infinity] },
-  ];
-  const [sortBy, setSortBy] = useState("newest");
+  // Furniture-specific filters
+  const [selectedRoomTypes, setSelectedRoomTypes] = useState({});
+  const [selectedStyles, setSelectedStyles] = useState({});
+  const [selectedMaterials, setSelectedMaterials] = useState({});
+  const [selectedColors, setSelectedColors] = useState({});
+  const [selectedConditions, setSelectedConditions] = useState({});
+  const [priceRange, setPriceRange] = useState([0, 10000]);
+  const [activeFiltersCount, setActiveFiltersCount] = useState(0);
+
+  // Dynamic filter options from API
+  const [filterOptions, setFilterOptions] = useState({
+    categories: [],
+    room_types: [],
+    styles: [],
+    materials: [],
+    colors: [],
+    conditions: [],
+    fob_locations: [],
+    price_range: { min: 0, max: 10000 },
+  });
+
+  const [sortBy, setSortBy] = useState("price_asc");
 
   // Sort options
   const sortOptions = [
-    { value: "newest", label: "Newest First" },
-    { value: "oldest", label: "Oldest First" },
     { value: "price_asc", label: "Price: Low → High" },
     { value: "price_desc", label: "Price: High → Low" },
-    { value: "deal_asc", label: "Deal Cost: Low → High" },
-    { value: "deal_desc", label: "Deal Cost: High → Low" },
-    { value: "moq_asc", label: "MOQ: Low → High" },
-    { value: "moq_desc", label: "MOQ: High → Low" },
+    { value: "title_asc", label: "Name: A → Z" },
+    { value: "title_desc", label: "Name: Z → A" },
+    { value: "brand_asc", label: "Brand: A → Z" },
+    { value: "qty_desc", label: "Quantity: High → Low" },
   ];
 
   // Snackbar state for notifications
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+
+  // Product detail modal state
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+
+  const handleOpenDetail = (product) => {
+    setSelectedProduct(product);
+    setDetailModalOpen(true);
+  };
+
+  const handleCloseDetail = () => {
+    setDetailModalOpen(false);
+    setSelectedProduct(null);
+  };
+
+  const handleAddToQuote = (product, qty) => {
+    setSelectedForInvoice((prev) => ({
+      ...prev,
+      [product.id]: qty,
+    }));
+    setSnackbar({ open: true, message: `Added ${product.title} to quote`, severity: "success" });
+  };
 
   // Helper to safely calculate deal cost
   const getDealCost = (p) => {
@@ -85,9 +131,17 @@ const Catalog = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const data = await fetchPublicProducts();
-        setProducts(data);
-        setFiltered(data);
+        // Fetch products and filter options in parallel
+        const [productsData, filtersData] = await Promise.all([
+          fetchPublicProducts(),
+          fetchProductFilters().catch(() => null), // Don't fail if filters endpoint doesn't exist yet
+        ]);
+        setProducts(productsData);
+        setFiltered(productsData);
+        if (filtersData) {
+          setFilterOptions(filtersData);
+          setPriceRange([filtersData.price_range?.min || 0, filtersData.price_range?.max || 10000]);
+        }
       } catch (err) {
         console.error("Failed to load catalog:", err);
       } finally {
@@ -96,6 +150,20 @@ const Catalog = () => {
     };
     load();
   }, []);
+
+  // Count active filters for badge
+  useEffect(() => {
+    let count = 0;
+    if (Object.values(selectedCategories).some(Boolean)) count++;
+    if (Object.values(selectedRoomTypes).some(Boolean)) count++;
+    if (Object.values(selectedStyles).some(Boolean)) count++;
+    if (Object.values(selectedMaterials).some(Boolean)) count++;
+    if (Object.values(selectedColors).some(Boolean)) count++;
+    if (Object.values(selectedConditions).some(Boolean)) count++;
+    if (Object.values(selectedFobs).some(Boolean)) count++;
+    if (priceRange[0] > (filterOptions.price_range?.min || 0) || priceRange[1] < (filterOptions.price_range?.max || 10000)) count++;
+    setActiveFiltersCount(count);
+  }, [selectedCategories, selectedRoomTypes, selectedStyles, selectedMaterials, selectedColors, selectedConditions, selectedFobs, priceRange, filterOptions]);
 
   useEffect(() => {
     let result = products;
@@ -106,76 +174,124 @@ const Catalog = () => {
         (p) =>
           p.title?.toLowerCase().includes(search.toLowerCase()) ||
           p.asin?.toLowerCase().includes(search.toLowerCase()) ||
-          p.upc?.toLowerCase().includes(search.toLowerCase())
+          p.upc?.toLowerCase().includes(search.toLowerCase()) ||
+          p.brand?.toLowerCase().includes(search.toLowerCase()) ||
+          p.material?.toLowerCase().includes(search.toLowerCase())
       );
     }
+
+    // Helper to check if a comma-separated field contains any of the selected values
+    const matchesMultiValue = (fieldValue, selectedValues) => {
+      if (!fieldValue) return false;
+      const productValues = fieldValue.split(",").map((v) => v.trim());
+      return selectedValues.some((selected) => productValues.includes(selected));
+    };
 
     const activeCats = Object.keys(selectedCategories).filter((k) => selectedCategories[k]);
     if (activeCats.length) result = result.filter((p) => activeCats.includes(p.category));
 
+    // Furniture-specific filters - support comma-separated multi-values
+    const activeRoomTypes = Object.keys(selectedRoomTypes).filter((k) => selectedRoomTypes[k]);
+    if (activeRoomTypes.length) result = result.filter((p) => matchesMultiValue(p.room_type, activeRoomTypes));
+
+    const activeStyles = Object.keys(selectedStyles).filter((k) => selectedStyles[k]);
+    if (activeStyles.length) result = result.filter((p) => matchesMultiValue(p.style, activeStyles));
+
+    const activeMaterials = Object.keys(selectedMaterials).filter((k) => selectedMaterials[k]);
+    if (activeMaterials.length) result = result.filter((p) => matchesMultiValue(p.material, activeMaterials));
+
+    const activeColors = Object.keys(selectedColors).filter((k) => selectedColors[k]);
+    if (activeColors.length) result = result.filter((p) => matchesMultiValue(p.color, activeColors));
+
+    const activeConditions = Object.keys(selectedConditions).filter((k) => selectedConditions[k]);
+    if (activeConditions.length) result = result.filter((p) => p.condition && activeConditions.includes(p.condition));
+
     const activeFobs = Object.keys(selectedFobs).filter((k) => selectedFobs[k]);
     if (activeFobs.length) result = result.filter((p) => p.fob && activeFobs.includes(p.fob));
 
-    // Filter by marketplace
-    const activeMarketplaces = Object.keys(selectedMarketplaces).filter((k) => selectedMarketplaces[k]);
-    if (activeMarketplaces.length) {
+    // Filter by price range
+    if (priceRange[0] > 0 || priceRange[1] < (filterOptions.price_range?.max || 10000)) {
       result = result.filter((p) => {
-        if (activeMarketplaces.includes("Amazon") && p.amazon_url) return true;
-        if (activeMarketplaces.includes("Walmart") && p.walmart_url) return true;
-        if (activeMarketplaces.includes("eBay") && p.ebay_url) return true;
-        return false;
-      });
-    }
-
-    // Filter by deal cost range
-    if (dealCostRange[0] > 0 || dealCostRange[1] !== Infinity) {
-      result = result.filter((p) => {
-        const cost = getDealCost(p);
-        if (cost === null) return true; // Include products without valid deal cost
-        return cost >= dealCostRange[0] &&
-               (dealCostRange[1] === Infinity || cost <= dealCostRange[1]);
+        const price = parseFloat(p.price) || 0;
+        return price >= priceRange[0] && price <= priceRange[1];
       });
     }
 
     // Apply sorting
     result = [...result].sort((a, b) => {
       switch (sortBy) {
-        case "newest":
-          return new Date(b.offer_date || b.created_at || 0) - new Date(a.offer_date || a.created_at || 0);
-        case "oldest":
-          return new Date(a.offer_date || a.created_at || 0) - new Date(b.offer_date || b.created_at || 0);
         case "price_asc":
           return (parseFloat(a.price) || 0) - (parseFloat(b.price) || 0);
         case "price_desc":
           return (parseFloat(b.price) || 0) - (parseFloat(a.price) || 0);
-        case "deal_asc":
-          return (getDealCost(a) || 0) - (getDealCost(b) || 0);
-        case "deal_desc":
-          return (getDealCost(b) || 0) - (getDealCost(a) || 0);
-        case "moq_asc":
-          return (parseInt(a.moq) || 0) - (parseInt(b.moq) || 0);
-        case "moq_desc":
-          return (parseInt(b.moq) || 0) - (parseInt(a.moq) || 0);
+        case "title_asc":
+          return (a.title || "").localeCompare(b.title || "");
+        case "title_desc":
+          return (b.title || "").localeCompare(a.title || "");
+        case "brand_asc":
+          return (a.brand || "").localeCompare(b.brand || "");
+        case "qty_desc":
+          return (parseInt(b.qty) || 0) - (parseInt(a.qty) || 0);
         default:
           return 0;
       }
     });
 
     setFiltered(result);
-  }, [search, selectedCategories, selectedFobs, selectedMarketplaces, showInStockOnly, products, dealCostRange, sortBy]);
+  }, [search, selectedCategories, selectedRoomTypes, selectedStyles, selectedMaterials, selectedColors, selectedConditions, selectedFobs, showInStockOnly, products, priceRange, sortBy, filterOptions]);
 
-  const categories = [...new Set(products.map((p) => p.category).filter(Boolean))].sort();
-  const fobPorts = [...new Set(products.map((p) => p.fob).filter(Boolean))].sort();
-  const marketplaces = ["Amazon", "Walmart", "eBay"];
+  // Derive filter options from products (fallback if API doesn't have data yet)
+  const categories = filterOptions.categories.length > 0
+    ? filterOptions.categories
+    : [...new Set(products.map((p) => p.category).filter(Boolean))].sort();
+  const roomTypes = filterOptions.room_types.length > 0
+    ? filterOptions.room_types
+    : [...new Set(products.map((p) => p.room_type).filter(Boolean))].sort();
+  const styles = filterOptions.styles.length > 0
+    ? filterOptions.styles
+    : [...new Set(products.map((p) => p.style).filter(Boolean))].sort();
+  const materials = filterOptions.materials.length > 0
+    ? filterOptions.materials
+    : [...new Set(products.map((p) => p.material).filter(Boolean))].sort();
+  const colors = filterOptions.colors.length > 0
+    ? filterOptions.colors
+    : [...new Set(products.map((p) => p.color).filter(Boolean))].sort();
+  const conditions = filterOptions.conditions.length > 0
+    ? filterOptions.conditions
+    : ["New", "Refurbished", "Used"];
+  const fobPorts = filterOptions.fob_locations.length > 0
+    ? filterOptions.fob_locations
+    : [...new Set(products.map((p) => p.fob).filter(Boolean))].sort();
 
   const toggleItem = (type, value) => {
     if (type === "category") {
       setSelectedCategories((prev) => ({ ...prev, [value]: !prev[value] }));
+    } else if (type === "room_type") {
+      setSelectedRoomTypes((prev) => ({ ...prev, [value]: !prev[value] }));
+    } else if (type === "style") {
+      setSelectedStyles((prev) => ({ ...prev, [value]: !prev[value] }));
+    } else if (type === "material") {
+      setSelectedMaterials((prev) => ({ ...prev, [value]: !prev[value] }));
+    } else if (type === "color") {
+      setSelectedColors((prev) => ({ ...prev, [value]: !prev[value] }));
+    } else if (type === "condition") {
+      setSelectedConditions((prev) => ({ ...prev, [value]: !prev[value] }));
     } else if (type === "fob") {
       setSelectedFobs((prev) => ({ ...prev, [value]: !prev[value] }));
-    } else if (type === "marketplace") {
-      setSelectedMarketplaces((prev) => ({ ...prev, [value]: !prev[value] }));
     }
+  };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSelectedCategories({});
+    setSelectedRoomTypes({});
+    setSelectedStyles({});
+    setSelectedMaterials({});
+    setSelectedColors({});
+    setSelectedConditions({});
+    setSelectedFobs({});
+    setPriceRange([filterOptions.price_range?.min || 0, filterOptions.price_range?.max || 10000]);
+    setSearch("");
   };
 
   const toggleInvoice = (product) => {
@@ -227,13 +343,13 @@ const Catalog = () => {
       `  ASIN: ${product.asin || "N/A"} | Price: $${product.price} | Qty: ${qty} | Total: $${totalCost.toLocaleString()}`;
 
     const body = encodeURIComponent(
-      `Hi NPP Sales Team,\n\n` +
-      `I would like to request an invoice for the following 1 product(s):\n\n` +
+      `Hi NPP Office Furniture Team,\n\n` +
+      `I would like to request a quote for the following 1 product(s):\n\n` +
       `${productList}\n\n` +
-      `Please send me an invoice at your earliest convenience.\n\n` +
+      `Please send me a quote at your earliest convenience.\n\n` +
       `Thank you!`
     );
-    return `mailto:sales@nat-procurement.com?subject=${subject}&body=${body}`;
+    return `mailto:sales@npp-office-furniture.com?subject=${subject}&body=${body}`;
   };
 
   // Generate mailto link for multiple products
@@ -256,13 +372,13 @@ const Catalog = () => {
       .join("\n\n");
 
     const body = encodeURIComponent(
-      `Hi NPP Sales Team,\n\n` +
-      `I would like to request an invoice for the following ${selectedProducts.length} product(s):\n\n` +
+      `Hi NPP Office Furniture Team,\n\n` +
+      `I would like to request a quote for the following ${selectedProducts.length} product(s):\n\n` +
       `${productList}\n\n` +
-      `Please send me an invoice at your earliest convenience.\n\n` +
+      `Please send me a quote at your earliest convenience.\n\n` +
       `Thank you!`
     );
-    return `mailto:sales@nat-procurement.com?subject=${subject}&body=${body}`;
+    return `mailto:sales@npp-office-furniture.com?subject=${subject}&body=${body}`;
   };
 
   const selectedCount = Object.keys(selectedForInvoice).length;
@@ -288,7 +404,7 @@ const Catalog = () => {
     <ThemeProvider theme={theme}>
       <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh", bgcolor: "#F5F7FA" }}>
         {/* Header */}
-        <AppBar position="sticky" sx={{ bgcolor: "white", py: { xs: 1, md: 1.5 }, boxShadow: 2 }}>
+        <AppBar position="sticky" sx={{ bgcolor: "white", boxShadow: 2 }}>
           <Toolbar sx={{ justifyContent: "space-between", minHeight: { xs: 64, md: 80 }, gap: 2 }}>
             {/* Left: Mobile menu + Logo + Home Link */}
             <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1, md: 2 } }}>
@@ -299,13 +415,13 @@ const Catalog = () => {
               )}
               <Box
                 component="a"
-                href="https://nat-procurement.com/"
+                href="/"
                 sx={{ display: "flex", alignItems: "center", textDecoration: "none" }}
               >
                 <Box
                   component="img"
                   src="/assets/logo.png"
-                  alt="NPP Deals"
+                  alt="NPP Office Furniture"
                   sx={{
                     height: { xs: 48, sm: 56, md: 72 },
                     maxWidth: "280px",
@@ -326,7 +442,7 @@ const Catalog = () => {
                   fontSize: { xs: "1rem", sm: "1.25rem", md: "1.5rem" },
                 }}
               >
-                LIVE CATALOG
+                OFFICE FURNITURE CATALOG
               </Typography>
               {selectedCount > 0 && (
                 <Button
@@ -338,7 +454,7 @@ const Catalog = () => {
                   sx={{ fontWeight: 600, minWidth: { xs: "auto", sm: 180 } }}
                 >
                   <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
-                    Request Invoice ({selectedCount})
+                    Request Quote ({selectedCount})
                   </Box>
                   <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>
                     ({selectedCount})
@@ -362,7 +478,7 @@ const Catalog = () => {
               </Typography>
               <Typography
                 component="a"
-                href="mailto:sales@nat-procurement.com"
+                href="mailto:sales@npp-office-furniture.com"
                 sx={{
                   color: "#666",
                   fontSize: "0.875rem",
@@ -370,7 +486,7 @@ const Catalog = () => {
                   "&:hover": { color: "#003087", textDecoration: "underline" },
                 }}
               >
-                sales@nat-procurement.com
+                sales@npp-office-furniture.com
               </Typography>
               <Typography
                 component="a"
@@ -389,122 +505,334 @@ const Catalog = () => {
         </AppBar>
 
         <Box sx={{ display: "flex", minHeight: "calc(100vh - 80px)" }}>
-          {/* Sidebar - fixed 320px on desktop, drawer on mobile */}
+          {/* Filter Toggle Button - Always visible on desktop */}
+          {!isMobile && (
+            <Tooltip title={filterPanelOpen ? "Hide Filters" : "Show Filters"}>
+              <IconButton
+                onClick={() => setFilterPanelOpen(!filterPanelOpen)}
+                sx={{
+                  position: "fixed",
+                  left: filterPanelOpen ? DRAWER_WIDTH - 20 : 0,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  zIndex: 1300,
+                  bgcolor: "#003087",
+                  color: "white",
+                  boxShadow: 2,
+                  "&:hover": { bgcolor: "#002060" },
+                  transition: "left 0.3s ease",
+                }}
+              >
+                <Badge badgeContent={activeFiltersCount} color="error">
+                  {filterPanelOpen ? <ChevronLeftIcon /> : <FilterListIcon />}
+                </Badge>
+              </IconButton>
+            </Tooltip>
+          )}
+
+          {/* Sidebar - collapsible on desktop, drawer on mobile */}
           <Drawer
-            variant={isMobile ? "temporary" : "permanent"}
-            open={drawerOpen}
+            variant={isMobile ? "temporary" : "persistent"}
+            open={isMobile ? drawerOpen : filterPanelOpen}
             onClose={() => setDrawerOpen(false)}
             sx={{
-              width: 320,
+              width: filterPanelOpen ? DRAWER_WIDTH : 0,
               flexShrink: 0,
+              transition: "width 0.3s ease",
               "& .MuiDrawer-paper": {
-                width: 320,
+                width: DRAWER_WIDTH,
                 boxSizing: "border-box",
-                p: 3,
+                p: 2,
                 bgcolor: "white",
                 borderRight: "1px solid #e0e0e0",
-                mt: { xs: 0, md: "112px" },
-                height: { xs: "100%", md: "calc(100vh - 112px)" },
+                mt: { xs: 0, md: "80px" },
+                height: { xs: "100%", md: "calc(100vh - 80px)" },
+                overflowY: "auto",
+                overflowX: "hidden",
               },
             }}
           >
             {isMobile && (
               <IconButton onClick={() => setDrawerOpen(false)} sx={{ alignSelf: "flex-end" }}>
-                x
+                <ClearIcon />
               </IconButton>
             )}
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: "#003087" }}>
-              Deal Cost (per MOQ)
-            </Typography>
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-              {dealCostPresets.map(({ label, range }) => {
-                const isActive =
-                  dealCostRange[0] === range[0] &&
-                  (range[1] === Infinity
-                    ? dealCostRange[1] === Infinity
-                    : dealCostRange[1] === range[1]);
-                return (
-                  <Button
-                    key={label}
-                    variant={isActive ? "contained" : "outlined"}
-                    color={label === "All Deals" ? "secondary" : "primary"}
-                    size="small"
-                    onClick={() => setDealCostRange(range)}
-                    sx={{ minWidth: 90 }}
-                  >
-                    {label}
-                  </Button>
-                );
-              })}
+
+            {/* Filter Header with Clear All */}
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1, px: 1 }}>
+              <Typography variant="h6" sx={{ fontWeight: 700, color: "#003087", fontSize: "1rem" }}>
+                Filters {activeFiltersCount > 0 && `(${activeFiltersCount})`}
+              </Typography>
+              {activeFiltersCount > 0 && (
+                <Button size="small" onClick={clearAllFilters} startIcon={<ClearIcon />} sx={{ fontSize: "0.75rem" }}>
+                  Clear
+                </Button>
+              )}
             </Box>
-            <Divider sx={{ my: 2 }} />
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: "#003087" }}>
-              Marketplace
-            </Typography>
-            <FormGroup>
-              {marketplaces.map((mp) => (
-                <FormControlLabel
-                  key={mp}
-                  control={
-                    <Checkbox
-                      checked={!!selectedMarketplaces[mp]}
-                      onChange={() => toggleItem("marketplace", mp)}
-                      sx={{ color: "#003087", "&.Mui-checked": { color: "#003087" } }}
-                    />
-                  }
-                  label={mp}
+
+            {/* In Stock Only - Always visible at top */}
+            <Box sx={{ px: 1, mb: 1 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={showInStockOnly}
+                    onChange={(e) => setShowInStockOnly(e.target.checked)}
+                    size="small"
+                    sx={{ color: "#00A651", "&.Mui-checked": { color: "#00A651" } }}
+                  />
+                }
+                label={<Typography variant="body2">In Stock Only</Typography>}
+              />
+            </Box>
+
+            {/* Price Range Accordion */}
+            <Accordion defaultExpanded disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, px: 1 }}>
+                <Typography sx={{ fontWeight: 600, color: "#003087", fontSize: "0.875rem" }}>
+                  Price Range
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ px: 2, pt: 0 }}>
+                <Slider
+                  value={priceRange}
+                  onChange={(e, newValue) => setPriceRange(newValue)}
+                  valueLabelDisplay="auto"
+                  min={filterOptions.price_range?.min || 0}
+                  max={filterOptions.price_range?.max || 10000}
+                  valueLabelFormat={(value) => `$${value.toLocaleString()}`}
+                  size="small"
+                  sx={{ color: "#003087" }}
                 />
-              ))}
-            </FormGroup>
-            <Divider sx={{ my: 2 }} />
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: "#003087" }}>
-              Categories
-            </Typography>
-            <FormGroup>
-              {categories.map((cat) => (
-                <FormControlLabel
-                  key={cat}
-                  control={
-                    <Checkbox
-                      checked={!!selectedCategories[cat]}
-                      onChange={() => toggleItem("category", cat)}
-                      sx={{ color: "#003087", "&.Mui-checked": { color: "#003087" } }}
-                    />
-                  }
-                  label={cat}
-                />
-              ))}
-            </FormGroup>
-            <Divider sx={{ my: 2 }} />
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: "#003087" }}>
-              FOB Ports
-            </Typography>
-            <FormGroup>
-              {fobPorts.map((fob) => (
-                <FormControlLabel
-                  key={fob}
-                  control={
-                    <Checkbox
-                      checked={!!selectedFobs[fob]}
-                      onChange={() => toggleItem("fob", fob)}
-                      sx={{ color: "#003087", "&.Mui-checked": { color: "#003087" } }}
-                    />
-                  }
-                  label={fob}
-                />
-              ))}
-            </FormGroup>
-            <Divider sx={{ my: 2 }} />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={showInStockOnly}
-                  onChange={(e) => setShowInStockOnly(e.target.checked)}
-                  sx={{ color: "#00A651", "&.Mui-checked": { color: "#00A651" } }}
-                />
-              }
-              label="In Stock Only"
-            />
+                <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#666" }}>
+                  <span>${priceRange[0].toLocaleString()}</span>
+                  <span>${priceRange[1].toLocaleString()}</span>
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Room Type Accordion */}
+            {roomTypes.length > 0 && (
+              <Accordion disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, px: 1 }}>
+                  <Typography sx={{ fontWeight: 600, color: "#003087", fontSize: "0.875rem" }}>
+                    Room Type
+                    {Object.values(selectedRoomTypes).some(Boolean) && (
+                      <Chip size="small" label={Object.values(selectedRoomTypes).filter(Boolean).length} sx={{ ml: 1, height: 18, fontSize: "0.7rem" }} color="primary" />
+                    )}
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails sx={{ px: 1, pt: 0, maxHeight: 150, overflow: "auto" }}>
+                  <FormGroup>
+                    {roomTypes.map((room) => (
+                      <FormControlLabel
+                        key={room}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={!!selectedRoomTypes[room]}
+                            onChange={() => toggleItem("room_type", room)}
+                            sx={{ color: "#003087", "&.Mui-checked": { color: "#003087" }, py: 0.25 }}
+                          />
+                        }
+                        label={<Typography variant="body2" sx={{ fontSize: "0.8rem" }}>{room}</Typography>}
+                      />
+                    ))}
+                  </FormGroup>
+                </AccordionDetails>
+              </Accordion>
+            )}
+
+            {/* Style Accordion */}
+            {styles.length > 0 && (
+              <Accordion disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, px: 1 }}>
+                  <Typography sx={{ fontWeight: 600, color: "#003087", fontSize: "0.875rem" }}>
+                    Style
+                    {Object.values(selectedStyles).some(Boolean) && (
+                      <Chip size="small" label={Object.values(selectedStyles).filter(Boolean).length} sx={{ ml: 1, height: 18, fontSize: "0.7rem" }} color="primary" />
+                    )}
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails sx={{ px: 1, pt: 0, maxHeight: 150, overflow: "auto" }}>
+                  <FormGroup>
+                    {styles.map((style) => (
+                      <FormControlLabel
+                        key={style}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={!!selectedStyles[style]}
+                            onChange={() => toggleItem("style", style)}
+                            sx={{ color: "#003087", "&.Mui-checked": { color: "#003087" }, py: 0.25 }}
+                          />
+                        }
+                        label={<Typography variant="body2" sx={{ fontSize: "0.8rem" }}>{style}</Typography>}
+                      />
+                    ))}
+                  </FormGroup>
+                </AccordionDetails>
+              </Accordion>
+            )}
+
+            {/* Material Accordion */}
+            {materials.length > 0 && (
+              <Accordion disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, px: 1 }}>
+                  <Typography sx={{ fontWeight: 600, color: "#003087", fontSize: "0.875rem" }}>
+                    Material
+                    {Object.values(selectedMaterials).some(Boolean) && (
+                      <Chip size="small" label={Object.values(selectedMaterials).filter(Boolean).length} sx={{ ml: 1, height: 18, fontSize: "0.7rem" }} color="primary" />
+                    )}
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails sx={{ px: 1, pt: 0, maxHeight: 150, overflow: "auto" }}>
+                  <FormGroup>
+                    {materials.map((mat) => (
+                      <FormControlLabel
+                        key={mat}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={!!selectedMaterials[mat]}
+                            onChange={() => toggleItem("material", mat)}
+                            sx={{ color: "#003087", "&.Mui-checked": { color: "#003087" }, py: 0.25 }}
+                          />
+                        }
+                        label={<Typography variant="body2" sx={{ fontSize: "0.8rem" }}>{mat}</Typography>}
+                      />
+                    ))}
+                  </FormGroup>
+                </AccordionDetails>
+              </Accordion>
+            )}
+
+            {/* Color Accordion */}
+            {colors.length > 0 && (
+              <Accordion disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, px: 1 }}>
+                  <Typography sx={{ fontWeight: 600, color: "#003087", fontSize: "0.875rem" }}>
+                    Color
+                    {Object.values(selectedColors).some(Boolean) && (
+                      <Chip size="small" label={Object.values(selectedColors).filter(Boolean).length} sx={{ ml: 1, height: 18, fontSize: "0.7rem" }} color="primary" />
+                    )}
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails sx={{ px: 1, pt: 0, maxHeight: 150, overflow: "auto" }}>
+                  <FormGroup>
+                    {colors.map((color) => (
+                      <FormControlLabel
+                        key={color}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={!!selectedColors[color]}
+                            onChange={() => toggleItem("color", color)}
+                            sx={{ color: "#003087", "&.Mui-checked": { color: "#003087" }, py: 0.25 }}
+                          />
+                        }
+                        label={<Typography variant="body2" sx={{ fontSize: "0.8rem" }}>{color}</Typography>}
+                      />
+                    ))}
+                  </FormGroup>
+                </AccordionDetails>
+              </Accordion>
+            )}
+
+            {/* Condition Accordion */}
+            {conditions.length > 0 && (
+              <Accordion disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, px: 1 }}>
+                  <Typography sx={{ fontWeight: 600, color: "#003087", fontSize: "0.875rem" }}>
+                    Condition
+                    {Object.values(selectedConditions).some(Boolean) && (
+                      <Chip size="small" label={Object.values(selectedConditions).filter(Boolean).length} sx={{ ml: 1, height: 18, fontSize: "0.7rem" }} color="primary" />
+                    )}
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails sx={{ px: 1, pt: 0 }}>
+                  <FormGroup>
+                    {conditions.map((cond) => (
+                      <FormControlLabel
+                        key={cond}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={!!selectedConditions[cond]}
+                            onChange={() => toggleItem("condition", cond)}
+                            sx={{ color: "#003087", "&.Mui-checked": { color: "#003087" }, py: 0.25 }}
+                          />
+                        }
+                        label={<Typography variant="body2" sx={{ fontSize: "0.8rem" }}>{cond}</Typography>}
+                      />
+                    ))}
+                  </FormGroup>
+                </AccordionDetails>
+              </Accordion>
+            )}
+
+            {/* Categories Accordion */}
+            {categories.length > 0 && (
+              <Accordion disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, px: 1 }}>
+                  <Typography sx={{ fontWeight: 600, color: "#003087", fontSize: "0.875rem" }}>
+                    Categories
+                    {Object.values(selectedCategories).some(Boolean) && (
+                      <Chip size="small" label={Object.values(selectedCategories).filter(Boolean).length} sx={{ ml: 1, height: 18, fontSize: "0.7rem" }} color="primary" />
+                    )}
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails sx={{ px: 1, pt: 0, maxHeight: 150, overflow: "auto" }}>
+                  <FormGroup>
+                    {categories.map((cat) => (
+                      <FormControlLabel
+                        key={cat}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={!!selectedCategories[cat]}
+                            onChange={() => toggleItem("category", cat)}
+                            sx={{ color: "#003087", "&.Mui-checked": { color: "#003087" }, py: 0.25 }}
+                          />
+                        }
+                        label={<Typography variant="body2" sx={{ fontSize: "0.8rem" }}>{cat}</Typography>}
+                      />
+                    ))}
+                  </FormGroup>
+                </AccordionDetails>
+              </Accordion>
+            )}
+
+            {/* FOB Location Accordion */}
+            {fobPorts.length > 0 && (
+              <Accordion disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, px: 1 }}>
+                  <Typography sx={{ fontWeight: 600, color: "#003087", fontSize: "0.875rem" }}>
+                    FOB Location
+                    {Object.values(selectedFobs).some(Boolean) && (
+                      <Chip size="small" label={Object.values(selectedFobs).filter(Boolean).length} sx={{ ml: 1, height: 18, fontSize: "0.7rem" }} color="primary" />
+                    )}
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails sx={{ px: 1, pt: 0, maxHeight: 120, overflow: "auto" }}>
+                  <FormGroup>
+                    {fobPorts.map((fob) => (
+                      <FormControlLabel
+                        key={fob}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={!!selectedFobs[fob]}
+                            onChange={() => toggleItem("fob", fob)}
+                            sx={{ color: "#003087", "&.Mui-checked": { color: "#003087" }, py: 0.25 }}
+                          />
+                        }
+                        label={<Typography variant="body2" sx={{ fontSize: "0.8rem" }}>{fob}</Typography>}
+                      />
+                    ))}
+                  </FormGroup>
+                </AccordionDetails>
+              </Accordion>
+            )}
           </Drawer>
 
           {/* Main Content - takes remaining space */}
@@ -512,15 +840,14 @@ const Catalog = () => {
             component="main"
             sx={{
               flexGrow: 1,
-              p: { xs: 2, md: 4 },
-              width: { xs: "100%", md: "calc(100% - 320px)" },
-              ml: { xs: 0, md: 0 },
+              p: { xs: 2, md: 3 },
+              transition: "margin 0.3s ease",
               overflowX: "hidden",
             }}
           >
             <Box sx={{ display: "flex", gap: 2, mb: 3, flexWrap: "wrap", alignItems: "center" }}>
               <TextField
-                label="Search by title, ASIN, or UPC..."
+                label="Search by title, brand, or SKU..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 sx={{ flexGrow: 1, maxWidth: 500, bgcolor: "white", borderRadius: 1 }}
@@ -562,15 +889,23 @@ const Catalog = () => {
                       flexDirection: "column",
                       bgcolor: "white",
                       borderRadius: 2,
+                      cursor: "pointer",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        boxShadow: "0 8px 24px rgba(0,48,135,0.15)",
+                      },
                     }}
+                    onClick={() => handleOpenDetail(p)}
                   >
                     <Box sx={{ position: "relative" }}>
-                      <CardMedia
-                        component="img"
-                        height="200"
-                        image={p.image_url || "/no-image.png"}
-                        alt={p.title}
-                        sx={{ objectFit: "contain", bgcolor: "#f9f9f9" }}
+                      <ProductImageGallery
+                        mainImage={p.image_url}
+                        secondaryImages={p.secondary_images}
+                        title={p.title}
+                        height={200}
+                        showThumbnails={false}
+                        enableZoom={false}
                       />
                       <Box
                         sx={{
@@ -584,6 +919,7 @@ const Catalog = () => {
                           borderRadius: 1,
                           px: 0.5,
                         }}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <Checkbox
                           checked={!!selectedForInvoice[p.id]}
@@ -605,19 +941,53 @@ const Catalog = () => {
                           </Select>
                         )}
                       </Box>
+                      {/* Condition badge */}
+                      {p.condition && (
+                        <Chip
+                          label={p.condition}
+                          size="small"
+                          color={p.condition === "New" ? "success" : p.condition === "Refurbished" ? "warning" : "default"}
+                          sx={{
+                            position: "absolute",
+                            top: 8,
+                            right: 8,
+                            fontWeight: 600,
+                          }}
+                        />
+                      )}
+                      {/* Multiple images indicator */}
+                      {p.secondary_images && p.secondary_images.length > 0 && (
+                        <Box
+                          sx={{
+                            position: "absolute",
+                            bottom: 8,
+                            right: 8,
+                            bgcolor: "rgba(0,0,0,0.6)",
+                            color: "white",
+                            px: 1,
+                            py: 0.25,
+                            borderRadius: 1,
+                            fontSize: "0.7rem",
+                            fontWeight: 600,
+                          }}
+                        >
+                          +{p.secondary_images.length} photos
+                        </Box>
+                      )}
                     </Box>
                     <CardContent sx={{ flexGrow: 1 }}>
                       <Typography variant="h6" noWrap sx={{ fontWeight: 600 }}>
                         {p.title}
                       </Typography>
+                      {/* Brand */}
+                      {p.brand && (
+                        <Typography variant="body2" sx={{ color: "#666", fontStyle: "italic", mt: 0.25 }}>
+                          {p.brand}
+                        </Typography>
+                      )}
                       {p.asin && (
                         <Typography variant="body2" sx={{ fontWeight: 600, color: "#003087", mt: 0.5 }}>
                           ASIN: {p.asin}
-                        </Typography>
-                      )}
-                      {p.upc && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                          UPC: {p.upc}
                         </Typography>
                       )}
                       <Box sx={{ mt: 1, display: "flex", gap: 1, flexWrap: "wrap" }}>
@@ -629,89 +999,45 @@ const Catalog = () => {
                           size="small"
                         />
                         {p.fob && <Chip label={p.fob} variant="outlined" size="small" />}
-                        {(() => {
-                          const dealCost = getDealCost(p);
-                          if (!dealCost) return null;
-                          return (
-                            <Chip
-                              label={`Deal: $${dealCost.toLocaleString()}`}
-                              size="small"
-                              sx={{
-                                bgcolor: "#003087",
-                                color: "white",
-                                fontWeight: 600,
-                              }}
-                            />
-                          );
-                        })()}
                       </Box>
+                      {/* Furniture-specific details */}
                       <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 0.5 }}>
+                        {/* Dimensions */}
+                        {(p.width || p.depth || p.height) && (
+                          <Typography variant="body2" color="text.secondary">
+                            <strong>Dimensions:</strong>{" "}
+                            {[
+                              p.width && `${p.width}"W`,
+                              p.depth && `${p.depth}"D`,
+                              p.height && `${p.height}"H`,
+                            ]
+                              .filter(Boolean)
+                              .join(" x ")}
+                          </Typography>
+                        )}
+                        {/* Material */}
+                        {p.material && (
+                          <Typography variant="body2" color="text.secondary">
+                            <strong>Material:</strong> {p.material}
+                          </Typography>
+                        )}
+                        {/* Color */}
+                        {p.color && (
+                          <Typography variant="body2" color="text.secondary">
+                            <strong>Color:</strong> {p.color}
+                          </Typography>
+                        )}
                         {p.lead_time && (
                           <Typography variant="body2" color="text.secondary">
                             <strong>Lead Time:</strong> {p.lead_time}
                           </Typography>
                         )}
-                        {p.exp_date && (
-                          <Typography variant="body2" color="text.secondary">
-                            <strong>Exp Date:</strong> {p.exp_date}
-                          </Typography>
-                        )}
                       </Box>
                     </CardContent>
-                    <CardActions sx={{ px: 2, pb: 2, pt: 0, justifyContent: "space-between", alignItems: "center" }}>
-                      <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
-                        {p.amazon_url && (
-                          <Button
-                            size="small"
-                            variant="contained"
-                            href={p.amazon_url}
-                            target="_blank"
-                            sx={{
-                              bgcolor: "#FF9900",
-                              color: "#000",
-                              "&:hover": { bgcolor: "#E68A00" },
-                              fontWeight: 600,
-                              textTransform: "none",
-                            }}
-                          >
-                            Amazon
-                          </Button>
-                        )}
-                        {p.walmart_url && (
-                          <Button
-                            size="small"
-                            variant="contained"
-                            href={p.walmart_url}
-                            target="_blank"
-                            sx={{
-                              bgcolor: "#0071CE",
-                              color: "#fff",
-                              "&:hover": { bgcolor: "#005BA1" },
-                              fontWeight: 600,
-                              textTransform: "none",
-                            }}
-                          >
-                            Walmart
-                          </Button>
-                        )}
-                        {p.ebay_url && (
-                          <Button
-                            size="small"
-                            variant="contained"
-                            href={p.ebay_url}
-                            target="_blank"
-                            sx={{
-                              bgcolor: "#E53238",
-                              color: "#fff",
-                              "&:hover": { bgcolor: "#C72C31" },
-                              fontWeight: 600,
-                              textTransform: "none",
-                            }}
-                          >
-                            eBay
-                          </Button>
-                        )}
-                      </Box>
+                    <CardActions
+                      sx={{ px: 2, pb: 2, pt: 0, justifyContent: "flex-end" }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <Button
                         size="small"
                         variant="contained"
@@ -737,20 +1063,20 @@ const Catalog = () => {
                             })
                             .join("\n\n");
                           const body = encodeURIComponent(
-                            `Hi NPP Sales Team,\n\n` +
-                            `I would like to request an invoice for the following ${selectedProducts.length} product(s):\n\n` +
+                            `Hi NPP Office Furniture Team,\n\n` +
+                            `I would like to request a quote for the following ${selectedProducts.length} product(s):\n\n` +
                             `${productList}\n\n` +
-                            `Please send me an invoice at your earliest convenience.\n\n` +
+                            `Please send me a quote at your earliest convenience.\n\n` +
                             `Thank you!`
                           );
-                          window.location.href = `mailto:sales@nat-procurement.com?subject=${subject}&body=${body}`;
+                          window.location.href = `mailto:sales@npp-office-furniture.com?subject=${subject}&body=${body}`;
                         }}
                         sx={{
                           fontWeight: 600,
                           textTransform: "none",
                         }}
                       >
-                        Request Invoice
+                        Request Quote
                       </Button>
                     </CardActions>
                   </Card>
@@ -760,7 +1086,17 @@ const Catalog = () => {
           </Box>
         </Box>
 
-        
+        {/* Product Detail Modal */}
+        <ProductDetailModal
+          open={detailModalOpen}
+          onClose={handleCloseDetail}
+          product={selectedProduct}
+          onAddToQuote={handleAddToQuote}
+          isSelected={selectedProduct ? !!selectedForInvoice[selectedProduct.id] : false}
+          selectedQty={selectedProduct ? selectedForInvoice[selectedProduct.id] : null}
+          onQtyChange={(qty) => selectedProduct && updateInvoiceQty(selectedProduct.id, qty)}
+        />
+
         {/* Snackbar for notifications */}
         <Snackbar
           open={snackbar.open}

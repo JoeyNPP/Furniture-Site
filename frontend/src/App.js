@@ -4,6 +4,7 @@ import Login from "./components/Login";
 import InternalProductList from "./components/InternalProductList";
 import CategoryPage from "./components/CategoryPage";
 import Catalog from "./components/Catalog";
+import AdminSettings from "./components/AdminSettings";
 import { Box, CssBaseline } from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { SettingsContext } from "./settings/SettingsContext";
@@ -42,6 +43,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <InternalProductList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminSettings />
               </ProtectedRoute>
             }
           />

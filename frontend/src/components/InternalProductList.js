@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useContext } from "react";
+import React, { useEffect, useState, useRef, useContext, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { DataGrid } from "@mui/x-data-grid";
 import {
@@ -25,13 +25,20 @@ import {
   useMediaQuery,
   useTheme,
   Divider,
+  Paper,
+  Chip,
 } from "@mui/material";
+import InventoryIcon from "@mui/icons-material/Inventory";
+import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
+import CategoryIcon from "@mui/icons-material/Category";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import MenuIcon from "@mui/icons-material/Menu";
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import SettingsDialog from "./SettingsDialog";
 import ProductFormDialog from "./ProductFormDialog";
-import CustomizeColumnsDialog from "./CustomizeColumnsDialog";
 import VendorPerformance from "./VendorPerformance";
-import { fetchProducts, createProduct, updateProduct, deleteProduct, markOutOfStock, searchProducts, uploadProducts } from "../api";
+import { fetchProducts, createProduct, updateProduct, deleteProduct, markOutOfStock, searchProducts, uploadProducts, fetchCurrentUser } from "../api";
 import { sendIndividualEmails, sendGroupEmail } from "../emailSender";
 import * as XLSX from "xlsx";
 import jwtDecode from "jwt-decode";
@@ -39,15 +46,17 @@ import { SettingsContext } from "../settings/SettingsContext";
 
 const DEFAULT_DOWNLOAD_COLUMNS = [
   "title",
-  "amazon_url",
-  "asin",
+  "sku",
   "price",
   "moq",
   "qty",
   "upc",
   "lead_time",
   "fob",
-  "walmart_url",
+  "brand",
+  "color",
+  "material",
+  "condition",
 ];
 
 const BULK_EDITABLE_FIELDS = [
@@ -59,21 +68,28 @@ const BULK_EDITABLE_FIELDS = [
   { value: "exp_date", label: "Expiration Date" },
   { value: "fob", label: "FOB" },
   { value: "price", label: "Price" },
-  { value: "cost", label: "Cost" },
   { value: "moq", label: "MOQ" },
   { value: "qty", label: "Quantity" },
-  { value: "sales_per_month", label: "Sales Per Month" },
-  { value: "net", label: "Net" },
   { value: "offer_date", label: "Offer Date" },
   { value: "out_of_stock", label: "Out of Stock (true/false)" },
-  { value: "amazon_url", label: "Amazon URL" },
-  { value: "walmart_url", label: "Walmart URL" },
-  { value: "ebay_url", label: "eBay URL" },
   { value: "image_url", label: "Image URL" },
+  // Furniture-specific fields
+  { value: "brand", label: "Brand" },
+  { value: "color", label: "Color" },
+  { value: "material", label: "Material" },
+  { value: "room_type", label: "Room Type" },
+  { value: "style", label: "Style" },
+  { value: "condition", label: "Condition" },
+  { value: "width", label: "Width" },
+  { value: "depth", label: "Depth" },
+  { value: "height", label: "Height" },
+  { value: "weight", label: "Weight" },
+  { value: "warranty", label: "Warranty" },
+  { value: "assembly_required", label: "Assembly Required (true/false)" },
 ];
 
-const INTEGER_FIELDS = new Set(["moq", "qty", "sales_per_month"]);
-const DECIMAL_FIELDS = new Set(["price", "cost", "net"]);
+const INTEGER_FIELDS = new Set(["moq", "qty"]);
+const DECIMAL_FIELDS = new Set(["price", "width", "depth", "height", "weight"]);
 
 const sanitizeDownloadSelection = (fields, allowedFields) =>
   allowedFields.filter((field) => fields.includes(field));
@@ -104,19 +120,7 @@ const InternalProductList = ({ onBack }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [vendorFilter, setVendorFilter] = useState("");
-  const [stockFilter, setStockFilter] = useState("in");
-  const [dealCostRange, setDealCostRange] = useState([0, Infinity]);
-  const [expirationFilter, setExpirationFilter] = useState("all"); // all, expiring, expired
-
-  // Deal Cost presets (matching catalog)
-  const dealCostPresets = [
-    { label: "All Deals", range: [0, Infinity] },
-    { label: "$0-$1K", range: [0, 1000] },
-    { label: "$1K-$3K", range: [1000, 3000] },
-    { label: "$3K-$5K", range: [3000, 5000] },
-    { label: "$5K-$10K", range: [5000, 10000] },
-    { label: "$10K+", range: [10000, Infinity] },
-  ];
+  const [stockFilter, setStockFilter] = useState(settings.defaultStockFilter || "in");
   const [pageSize, setPageSize] = useState(50);
   const [columnVisibilityModel, setColumnVisibilityModel] = useState(settings.columnVisibility || {});
   const [sortModel, setSortModel] = useState([]);
@@ -124,7 +128,6 @@ const InternalProductList = ({ onBack }) => {
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState("add");
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [customizeDialogOpen, setCustomizeDialogOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
@@ -135,6 +138,7 @@ const InternalProductList = ({ onBack }) => {
   const [downloadSelectedColumns, setDownloadSelectedColumns] = useState(DEFAULT_DOWNLOAD_COLUMNS);
   const [loading, setLoading] = useState(false);
   const [undoStack, setUndoStack] = useState([]);
+  const [userRole, setUserRole] = useState(null);
   const bulkEditableFields = BULK_EDITABLE_FIELDS;
   const integerFields = INTEGER_FIELDS;
   const decimalFields = DECIMAL_FIELDS;
@@ -185,6 +189,12 @@ const InternalProductList = ({ onBack }) => {
       }
       localStorage.setItem("tokenExpiration", expirationTime);
       loadProducts();
+      // Fetch current user info for role
+      fetchCurrentUser().then(user => {
+        setUserRole(user.role);
+      }).catch(err => {
+        console.error("Error fetching current user:", err);
+      });
     } catch (error) {
       console.error("Error decoding token:", error);
       localStorage.removeItem("token");
@@ -194,15 +204,13 @@ const InternalProductList = ({ onBack }) => {
   }, [navigate]);
 
   useEffect(() => {
-    const savedSortModel = localStorage.getItem("sortModel");
-    if (savedSortModel) {
-      setSortModel(JSON.parse(savedSortModel));
-    } else {
-      const defaultSortModel = [{ field: "offer_date", sort: "desc" }];
-      setSortModel(defaultSortModel);
-      localStorage.setItem("sortModel", JSON.stringify(defaultSortModel));
-    }
-  }, []);
+    // Use settings for default sort, fallback to offer_date desc
+    const defaultSortModel = [{
+      field: settings.defaultSortColumn || "offer_date",
+      sort: settings.defaultSortDirection || "desc"
+    }];
+    setSortModel(defaultSortModel);
+  }, [settings.defaultSortColumn, settings.defaultSortDirection]);
 
   useEffect(() => {
     localStorage.removeItem("columnVisibilityModel");
@@ -213,6 +221,18 @@ const InternalProductList = ({ onBack }) => {
     setColumnVisibilityModel(settings.columnVisibility || defaultModel);
     localStorage.setItem("columnVisibilityModel", JSON.stringify(settings.columnVisibility || defaultModel));
   }, [settings.columnVisibility]);
+
+  // Auto-refresh functionality
+  useEffect(() => {
+    const interval = settings.autoRefreshInterval;
+    if (!interval || interval === 0) return;
+
+    const refreshTimer = setInterval(() => {
+      loadProducts();
+    }, interval * 60 * 1000); // Convert minutes to milliseconds
+
+    return () => clearInterval(refreshTimer);
+  }, [settings.autoRefreshInterval]);
 
   async function loadProducts() {
     setLoading(true);
@@ -328,20 +348,6 @@ const InternalProductList = ({ onBack }) => {
     } else if (stockFilter === "out") {
       temp = temp.filter((p) => p.out_of_stock === true);
     }
-    // Deal Cost filter
-    if (dealCostRange[0] > 0 || dealCostRange[1] < Infinity) {
-      temp = temp.filter((p) => {
-        const dealCost = getDealCost(p);
-        if (dealCost === null) return false;
-        return dealCost >= dealCostRange[0] && dealCost <= dealCostRange[1];
-      });
-    }
-    // Expiration filter
-    if (expirationFilter === "expiring") {
-      temp = temp.filter((p) => getExpirationStatus(p.exp_date) === "expiring-soon");
-    } else if (expirationFilter === "expired") {
-      temp = temp.filter((p) => getExpirationStatus(p.exp_date) === "expired");
-    }
     setFilteredProducts(temp);
   };
 
@@ -349,8 +355,6 @@ const InternalProductList = ({ onBack }) => {
     setCategoryFilter("");
     setVendorFilter("");
     setStockFilter("in");
-    setDealCostRange([0, Infinity]);
-    setExpirationFilter("all");
     setFilteredProducts(products.filter((p) => p.out_of_stock === false));
   };
 
@@ -361,9 +365,9 @@ const InternalProductList = ({ onBack }) => {
   const formatProductForWhatsApp = (product) => {
     const lines = [];
 
-    // Amazon URL (required)
-    if (product.amazon_url) {
-      lines.push(product.amazon_url);
+    // Title
+    if (product.title) {
+      lines.push(product.title);
     }
 
     // Price (required)
@@ -527,14 +531,15 @@ const InternalProductList = ({ onBack }) => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this product?")) {
-      try {
-        await deleteProduct(id);
-        alert("Product deleted successfully");
-        loadProducts();
-      } catch (error) {
-        alert("Failed to delete product");
-      }
+    if (settings.confirmBeforeDelete !== false && !window.confirm("Are you sure you want to delete this product?")) {
+      return;
+    }
+    try {
+      await deleteProduct(id);
+      alert("Product deleted successfully");
+      loadProducts();
+    } catch (error) {
+      alert("Failed to delete product");
     }
   };
 
@@ -576,37 +581,44 @@ const InternalProductList = ({ onBack }) => {
       groupedByDate[date].push(product);
     });
     const data = [];
-    data.push(["Unnamed: 0", ".1", ".2", ".3", ".4", "Unnamed: 6", "Unnamed: 7", "Unnamed: 8", "Unnamed: 9", "Unnamed: 10", "Unnamed: 11", "Unnamed: 12", "Unnamed: 13"]);
+    data.push(["Title", "SKU", "Price", "MOQ", "QTY", "Brand", "Category", "Material", "Color", "Dimensions", "Condition", "FOB", "Lead Time"]);
     data.push([
-      "For sales inquiries please email sales@nat-procurement.com",
-      "Strong Asin",
-      "Price",
-      "MOQ",
-      "QTY",
-      "UPC/NOTE",
-      "Lead Time",
-      "Exp Date",
-      "FOB",
-      "Walmart URL",
-      "EBAY URL",
-      "Sales Per Month"
+      "For sales inquiries please email sales@npp-office-furniture.com",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
     ]);
     Object.keys(groupedByDate).sort((a, b) => new Date(b) - new Date(a)).forEach((date) => {
       data.push([date]);
       groupedByDate[date].forEach((product) => {
+        const dimensions = [
+          product.width && `${product.width}"W`,
+          product.depth && `${product.depth}"D`,
+          product.height && `${product.height}"H`
+        ].filter(Boolean).join(" x ");
         data.push([
-          product.amazon_url || "",
-          product.asin || "",
+          product.title || "",
+          product.sku || "",
           product.price || "",
           product.moq || "",
           product.qty || "",
-          product.upc || "",
-          product.lead_time || "",
-          product.exp_date || "",
+          product.brand || "",
+          product.category || "",
+          product.material || "",
+          product.color || "",
+          dimensions,
+          product.condition || "",
           product.fob || "",
-          product.walmart_url || "",
-          product.ebay_url || "",
-          product.sales_per_month || ""
+          product.lead_time || ""
         ]);
       });
     });
@@ -675,16 +687,16 @@ const InternalProductList = ({ onBack }) => {
 
   const baseColumns = [
     { field: "title", headerName: "Title", width: 200 * (settings.textScale || 1) },
-    { field: "category", headerName: "Category", width: 200 * (settings.textScale || 1) },
-    { field: "vendor_id", headerName: "Vendor ID", width: 120 * (settings.textScale || 1) },
-    { field: "vendor", headerName: "Vendor", width: 150 * (settings.textScale || 1) },
+    { field: "category", headerName: "Category", width: 150 * (settings.textScale || 1) },
+    { field: "brand", headerName: "Brand", width: 120 * (settings.textScale || 1) },
+    { field: "vendor_id", headerName: "Vendor ID", width: 100 * (settings.textScale || 1) },
+    { field: "vendor", headerName: "Vendor", width: 120 * (settings.textScale || 1) },
     { field: "price", headerName: "Price", width: 100 * (settings.textScale || 1), type: "number" },
-    { field: "cost", headerName: "Cost", width: 100 * (settings.textScale || 1), type: "number" },
-    { field: "moq", headerName: "MOQ", width: 100 * (settings.textScale || 1), type: "number" },
-    { field: "qty", headerName: "Qty", width: 100 * (settings.textScale || 1), type: "number" },
+    { field: "moq", headerName: "MOQ", width: 80 * (settings.textScale || 1), type: "number" },
+    { field: "qty", headerName: "Qty", width: 80 * (settings.textScale || 1), type: "number" },
     { field: "upc", headerName: "UPC", width: 120 * (settings.textScale || 1) },
-    { field: "asin", headerName: "ASIN", width: 120 * (settings.textScale || 1) },
-    { field: "lead_time", headerName: "Lead Time", width: 120 * (settings.textScale || 1) },
+    { field: "sku", headerName: "SKU", width: 120 * (settings.textScale || 1) },
+    { field: "lead_time", headerName: "Lead Time", width: 100 * (settings.textScale || 1) },
     {
       field: "exp_date",
       headerName: "Exp Date",
@@ -718,11 +730,35 @@ const InternalProductList = ({ onBack }) => {
       }
     },
     { field: "fob", headerName: "FOB", width: 100 * (settings.textScale || 1) },
+    // Furniture-specific columns
+    { field: "color", headerName: "Color", width: 100 * (settings.textScale || 1) },
+    { field: "material", headerName: "Material", width: 120 * (settings.textScale || 1) },
+    { field: "room_type", headerName: "Room Type", width: 120 * (settings.textScale || 1) },
+    { field: "style", headerName: "Style", width: 100 * (settings.textScale || 1) },
+    { field: "condition", headerName: "Condition", width: 100 * (settings.textScale || 1) },
+    { field: "width", headerName: "Width", width: 80 * (settings.textScale || 1), type: "number" },
+    { field: "depth", headerName: "Depth", width: 80 * (settings.textScale || 1), type: "number" },
+    { field: "height", headerName: "Height", width: 80 * (settings.textScale || 1), type: "number" },
+    {
+      field: "dimensions",
+      headerName: "Dimensions",
+      width: 140 * (settings.textScale || 1),
+      valueGetter: (params) => {
+        const w = params.row.width;
+        const d = params.row.depth;
+        const h = params.row.height;
+        const parts = [];
+        if (w) parts.push(`${w}"W`);
+        if (d) parts.push(`${d}"D`);
+        if (h) parts.push(`${h}"H`);
+        return parts.join(" x ") || "";
+      },
+    },
+    { field: "weight", headerName: "Weight (lbs)", width: 100 * (settings.textScale || 1), type: "number" },
+    { field: "warranty", headerName: "Warranty", width: 100 * (settings.textScale || 1) },
+    { field: "assembly_required", headerName: "Assembly", width: 90 * (settings.textScale || 1), type: "boolean" },
     { field: "image_url", headerName: "Image URL", width: 200 * (settings.textScale || 1) },
-    { field: "out_of_stock", headerName: "Out of Stock", width: 110 * (settings.textScale || 1), type: "boolean" },
-    { field: "amazon_url", headerName: "Amazon URL", width: 200 * (settings.textScale || 1) },
-    { field: "walmart_url", headerName: "Walmart URL", width: 200 * (settings.textScale || 1) },
-    { field: "ebay_url", headerName: "eBay URL", width: 200 * (settings.textScale || 1) },
+    { field: "out_of_stock", headerName: "Out of Stock", width: 100 * (settings.textScale || 1), type: "boolean" },
     {
       field: "offer_date",
       headerName: "Offer Date",
@@ -740,60 +776,6 @@ const InternalProductList = ({ onBack }) => {
         params.value
           ? new Date(params.value).toLocaleString('en-US', { timeZone: timezone })
           : "",
-    },
-    {
-      field: "customer_cost",
-      headerName: "Customer Cost per MOQ",
-      width: 180 * (settings.textScale || 1),
-      valueGetter: (params) => {
-        const price = Number(params.row.price);
-        const moq = Number(params.row.moq);
-        if (!isNaN(price) && !isNaN(moq)) {
-          return price * moq;
-        }
-        return "";
-      },
-    },
-    {
-      field: "profit_per_moq",
-      headerName: "Profit per MOQ",
-      width: 180 * (settings.textScale || 1),
-      valueGetter: (params) => {
-        const price = Number(params.row.price);
-        const cost = Number(params.row.cost);
-        const moq = Number(params.row.moq);
-        if (!isNaN(price) && !isNaN(cost) && !isNaN(moq)) {
-          return (price - cost) * moq;
-        }
-        return "";
-      },
-    },
-    {
-      field: "sales_per_month",
-      headerName: "Sales Per Month",
-      width: 150 * (settings.textScale || 1),
-      type: "number",
-    },
-    {
-      field: "net",
-      headerName: "Net",
-      width: 150 * (settings.textScale || 1),
-      type: "number",
-    },
-    {
-      field: "roi",
-      headerName: "ROI (%)",
-      width: 150 * (settings.textScale || 1),
-      type: "number",
-      valueGetter: (params) => {
-        const net = Number(params.row.net);
-        const price = Number(params.row.price);
-        if (!isNaN(net) && !isNaN(price) && price !== 0) {
-          return (net / price) * 100;
-        }
-        return "";
-      },
-      valueFormatter: (params) => (params.value ? `${params.value.toFixed(2)}%` : ""),
     },
     {
       field: "actions",
@@ -889,6 +871,42 @@ const InternalProductList = ({ onBack }) => {
     }
     return { ...col, width: col.width };
   });
+
+  // Calculate summary statistics for visible products
+  const summaryStats = useMemo(() => {
+    const stats = {
+      totalProducts: filteredProducts.length,
+      totalUnits: 0,
+      totalValue: 0,
+      averagePrice: 0,
+      uniqueCategories: new Set(),
+      uniqueVendors: new Set(),
+      lowStockCount: 0,
+    };
+
+    filteredProducts.forEach((product) => {
+      const price = parseFloat(product.price) || 0;
+      const qty = parseInt(product.qty) || 0;
+
+      stats.totalUnits += qty;
+      stats.totalValue += price * qty;
+
+      if (product.category) stats.uniqueCategories.add(product.category);
+      if (product.vendor) stats.uniqueVendors.add(product.vendor);
+
+      if (qty > 0 && qty < 5) stats.lowStockCount++;
+    });
+
+    stats.averagePrice = stats.totalProducts > 0
+      ? stats.totalValue / stats.totalUnits || 0
+      : 0;
+
+    return {
+      ...stats,
+      uniqueCategories: stats.uniqueCategories.size,
+      uniqueVendors: stats.uniqueVendors.size,
+    };
+  }, [filteredProducts]);
 
   const downloadableColumnOptions = baseColumns
     .filter((column) => column.field !== "actions")
@@ -996,6 +1014,7 @@ const InternalProductList = ({ onBack }) => {
       return;
     }
     if (
+      settings.confirmBeforeBulkActions !== false &&
       !window.confirm(
         `Mark ${selectedIds.length} selected product${selectedIds.length === 1 ? "" : "s"} out of stock?`
       )
@@ -1036,6 +1055,7 @@ const InternalProductList = ({ onBack }) => {
       return;
     }
     if (
+      settings.confirmBeforeBulkActions !== false &&
       !window.confirm(
         `Mark ${selectedIds.length} selected product${selectedIds.length === 1 ? "" : "s"} back in stock?`
       )
@@ -1223,28 +1243,18 @@ const InternalProductList = ({ onBack }) => {
 
   const bulkInputProps = getBulkInputProps();
   const allCategories = [
-    "Appliances",
-    "Automotive",
-    "Baby",
-    "Beauty & Personal Care",
-    "Cell Phones & Accessories",
-    "Clothing, Shoes & Jewelry",
-    "Electronics",
-    "Health & Household",
-    "Home & Kitchen",
-    "Industrial & Scientific",
-    "Kitchen & Dining",
-    "Musical Instruments",
-    "Patio, Lawn & Garden",
-    "Pet Supplies",
-    "Sports & Outdoors",
-    "Tools & Home Improvement",
-    "Toys & Games",
-    "Office Products",
-    "Grocery & Gourmet Food",
-    "Video Games",
-    "Arts, Crafts & Sewing",
-    "Camera & Photo",
+    "Desks",
+    "Chairs",
+    "Tables",
+    "Storage & Filing",
+    "Cubicles & Partitions",
+    "Sofas & Lounge",
+    "Reception Furniture",
+    "Conference Room",
+    "Bookcases & Shelving",
+    "Accessories",
+    "Lighting",
+    "Outdoor Furniture",
   ];
 
   const handleLogout = () => {
@@ -1294,32 +1304,6 @@ const InternalProductList = ({ onBack }) => {
             Logout
           </Button>
         </Stack>
-
-        <Divider sx={{ my: 2 }} />
-
-        {/* Deal Cost Filter */}
-        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: settings.theme === "dark" ? "#90caf9" : "#003087" }}>
-          Deal Cost (per MOQ)
-        </Typography>
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
-          {dealCostPresets.map(({ label, range }) => {
-            const isActive =
-              dealCostRange[0] === range[0] &&
-              (range[1] === Infinity ? dealCostRange[1] === Infinity : dealCostRange[1] === range[1]);
-            return (
-              <Button
-                key={label}
-                variant={isActive ? "contained" : "outlined"}
-                color={label === "All Deals" ? "secondary" : "primary"}
-                size="small"
-                onClick={() => setDealCostRange(range)}
-                sx={{ minWidth: 90 }}
-              >
-                {label}
-              </Button>
-            );
-          })}
-        </Box>
 
         <Divider sx={{ my: 2 }} />
 
@@ -1380,23 +1364,6 @@ const InternalProductList = ({ onBack }) => {
 
         <Divider sx={{ my: 2 }} />
 
-        {/* Expiration Filter */}
-        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: settings.theme === "dark" ? "#90caf9" : "#003087" }}>
-          Expiration Status
-        </Typography>
-        <FormControl size="small" fullWidth sx={{ mb: 2 }}>
-          <InputLabel>Select Status</InputLabel>
-          <Select
-            value={expirationFilter}
-            label="Select Status"
-            onChange={(e) => setExpirationFilter(e.target.value)}
-          >
-            <MenuItem value="all">All</MenuItem>
-            <MenuItem value="expiring">Expiring Soon (6 months)</MenuItem>
-            <MenuItem value="expired">Expired</MenuItem>
-          </Select>
-        </FormControl>
-
         {/* Filter Action Buttons */}
         <Stack spacing={1} sx={{ mb: 3 }}>
           <Button variant="contained" onClick={applyFilters} fullWidth>
@@ -1427,14 +1394,6 @@ const InternalProductList = ({ onBack }) => {
           </Button>
           <Button
             variant="contained"
-            color="info"
-            onClick={() => setCustomizeDialogOpen(true)}
-            fullWidth
-          >
-            Customize Columns
-          </Button>
-          <Button
-            variant="contained"
             color="secondary"
             onClick={handleUploadClick}
             disabled={uploading}
@@ -1454,6 +1413,17 @@ const InternalProductList = ({ onBack }) => {
           <Button variant="contained" color="primary" onClick={() => setSettingsDialogOpen(true)} fullWidth>
             Display & Settings
           </Button>
+          {userRole === "admin" && (
+            <Button
+              variant="contained"
+              color="warning"
+              onClick={() => navigate("/admin")}
+              startIcon={<AdminPanelSettingsIcon />}
+              fullWidth
+            >
+              Admin Settings
+            </Button>
+          )}
         </Stack>
 
         <input
@@ -1566,6 +1536,128 @@ const InternalProductList = ({ onBack }) => {
                 </Button>
               </Stack>
             </Stack>
+
+            {/* Summary Statistics Panel */}
+            <Paper
+              elevation={0}
+              sx={{
+                mt: 3,
+                p: 2,
+                bgcolor: settings.theme === 'dark' ? 'grey.900' : 'grey.50',
+                border: 1,
+                borderColor: settings.theme === 'dark' ? 'grey.800' : 'grey.200',
+                borderRadius: 2,
+              }}
+            >
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, fontWeight: 600 }}>
+                Inventory Summary {categoryFilter || vendorFilter || searchQuery ? "(Filtered)" : ""}
+              </Typography>
+              <Grid container spacing={2}>
+                {/* Total Products */}
+                <Grid item xs={6} sm={4} md={2}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <InventoryIcon color="primary" fontSize="small" />
+                    <Box>
+                      <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                        {summaryStats.totalProducts.toLocaleString()}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Products
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Grid>
+
+                {/* Total Units */}
+                <Grid item xs={6} sm={4} md={2}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <TrendingUpIcon color="info" fontSize="small" />
+                    <Box>
+                      <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                        {summaryStats.totalUnits.toLocaleString()}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Total Units
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Grid>
+
+                {/* Total Value */}
+                <Grid item xs={6} sm={4} md={2}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <AttachMoneyIcon color="success" fontSize="small" />
+                    <Box>
+                      <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                        ${summaryStats.totalValue >= 1000000
+                          ? (summaryStats.totalValue / 1000000).toFixed(2) + 'M'
+                          : summaryStats.totalValue >= 1000
+                            ? (summaryStats.totalValue / 1000).toFixed(1) + 'K'
+                            : summaryStats.totalValue.toFixed(0)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Total Value
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Grid>
+
+                {/* Average Price */}
+                <Grid item xs={6} sm={4} md={2}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <AttachMoneyIcon color="secondary" fontSize="small" />
+                    <Box>
+                      <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                        ${summaryStats.averagePrice.toFixed(0)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Avg Price
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Grid>
+
+                {/* Categories */}
+                <Grid item xs={6} sm={4} md={2}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CategoryIcon color="primary" fontSize="small" />
+                    <Box>
+                      <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                        {summaryStats.uniqueCategories}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Categories
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Grid>
+
+                {/* Low Stock Alert */}
+                <Grid item xs={6} sm={4} md={2}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <WarningAmberIcon
+                      color={summaryStats.lowStockCount > 0 ? "warning" : "disabled"}
+                      fontSize="small"
+                    />
+                    <Box>
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: 700,
+                          lineHeight: 1.2,
+                          color: summaryStats.lowStockCount > 0 ? 'warning.main' : 'text.primary'
+                        }}
+                      >
+                        {summaryStats.lowStockCount}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Low Stock (&lt;5)
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Grid>
+              </Grid>
+            </Paper>
           </>
         )}
       </Box>
@@ -1576,13 +1668,6 @@ const InternalProductList = ({ onBack }) => {
         onClose={handleDialogClose}
         onSubmit={handleFormSubmit}
         timezone={timezone}
-      />
-      <CustomizeColumnsDialog
-        open={customizeDialogOpen}
-        onClose={() => setCustomizeDialogOpen(false)}
-        columns={baseColumns}
-        columnVisibilityModel={columnVisibilityModel}
-        onColumnVisibilityChange={handleColumnVisibilityChange}
       />
       <Dialog
         open={bulkEditOpen}
@@ -1680,6 +1765,9 @@ const InternalProductList = ({ onBack }) => {
         onClose={() => setSettingsDialogOpen(false)}
         settings={settings}
         updateSettings={updateSettings}
+        columns={baseColumns}
+        columnVisibilityModel={columnVisibilityModel}
+        onColumnVisibilityChange={handleColumnVisibilityChange}
       />
     </Box>
   );

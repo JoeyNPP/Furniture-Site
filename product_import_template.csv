@@ -1,0 +1,4 @@
+title,sku,upc,category,brand,vendor,price,moq,qty,fob,lead time,material,color,width,depth,height,weight,condition,warranty,assembly required,room type,style,image url
+"Executive L-Shaped Desk",SKU-001,,Desks,Steelcase,Ideal Office,650,1,5,"Methuen, MA","5-7 Business Days",Laminate/Steel,Walnut,72,30,30,150,Preowned,"30 Days",FALSE,Private Office,Modern,https://example.com/desk1.jpg
+"Ergonomic Task Chair",SKU-002,,Chairs,Herman Miller,Ideal Office,325,1,12,"Methuen, MA","3-5 Business Days",Mesh/Fabric,Black,26,26,42,35,Refurbished,"90 Days",FALSE,Open Office,Contemporary,https://example.com/chair1.jpg
+"6x8 Cubicle Workstation",SKU-003,,Cubicles & Partitions,Haworth,Ideal Office,800,1,3,"Methuen, MA","7-10 Business Days",Fabric/Steel,Gray,96,72,54,200,Preowned,"30 Days",TRUE,Open Office,Modern,https://example.com/cubicle1.jpg

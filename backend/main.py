@@ -44,10 +44,10 @@ load_dotenv('.env')  # Fallback to .env for live
 # Database connection
 def get_db_connection():
     return psycopg2.connect(
-        dbname=os.getenv("DB_NAME", "npp_deals"),
+        dbname=os.getenv("DB_NAME", "npp_furniture"),
         user=os.getenv("DB_USER", "postgres"),
         password=os.getenv("DB_PASSWORD", "26,Sheetpans!"),
-        host=os.getenv("DB_HOST", "npp_deals-db"),
+        host=os.getenv("DB_HOST", "npp_furniture-db"),
         port=os.getenv("DB_PORT", "5432"),
         cursor_factory=RealDictCursor
     )
@@ -68,7 +68,7 @@ def init_db():
             moq INTEGER,
             qty INTEGER,
             upc TEXT,
-            asin TEXT,
+            sku TEXT,
             lead_time TEXT,
             exp_date TEXT,
             fob TEXT,
@@ -81,31 +81,132 @@ def init_db():
             last_sent TIMESTAMP,
             sales_per_month INTEGER,
             net FLOAT,
-            date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            -- Furniture-specific fields
+            room_type TEXT,
+            style TEXT,
+            material TEXT,
+            color TEXT,
+            brand TEXT,
+            width FLOAT,
+            depth FLOAT,
+            height FLOAT,
+            weight FLOAT,
+            condition TEXT DEFAULT 'New',
+            warranty TEXT,
+            assembly_required BOOLEAN DEFAULT FALSE,
+            features TEXT[],
+            secondary_images TEXT[]
         )
     """)
+    # Add new columns if they don't exist (for existing databases)
+    furniture_columns = [
+        ("room_type", "TEXT"),
+        ("style", "TEXT"),
+        ("material", "TEXT"),
+        ("color", "TEXT"),
+        ("brand", "TEXT"),
+        ("width", "FLOAT"),
+        ("depth", "FLOAT"),
+        ("height", "FLOAT"),
+        ("weight", "FLOAT"),
+        ("condition", "TEXT DEFAULT 'New'"),
+        ("warranty", "TEXT"),
+        ("assembly_required", "BOOLEAN DEFAULT FALSE"),
+        ("features", "TEXT[]"),
+        ("secondary_images", "TEXT[]"),
+        ("sku", "TEXT"),  # New SKU column to replace ASIN
+    ]
+    for col_name, col_type in furniture_columns:
+        try:
+            cur.execute(f"ALTER TABLE products ADD COLUMN IF NOT EXISTS {col_name} {col_type}")
+        except Exception:
+            pass  # Column might already exist
+
+    # Migrate data from asin to sku if asin column exists and sku is empty
+    try:
+        cur.execute("""
+            UPDATE products
+            SET sku = asin
+            WHERE asin IS NOT NULL
+            AND asin != ''
+            AND (sku IS NULL OR sku = '')
+        """)
+        conn.commit()
+    except Exception as e:
+        print(f"SKU migration note: {e}")
+        pass  # asin column might not exist in new databases
+    # Enhanced users table with roles and metadata
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
-            password TEXT NOT NULL
+            password TEXT NOT NULL,
+            email TEXT,
+            role TEXT DEFAULT 'viewer',
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            last_login TIMESTAMP,
+            created_by TEXT
         )
     """)
+    # Add new columns if they don't exist (for existing databases)
+    for col, col_type, default in [
+        ('email', 'TEXT', None),
+        ('role', 'TEXT', "'viewer'"),
+        ('is_active', 'BOOLEAN', 'TRUE'),
+        ('created_at', 'TIMESTAMP', 'NOW()'),
+        ('last_login', 'TIMESTAMP', None),
+        ('created_by', 'TEXT', None),
+    ]:
+        try:
+            if default:
+                cur.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type} DEFAULT {default}")
+            else:
+                cur.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
+            conn.commit()
+        except Exception:
+            conn.rollback()  # Column likely already exists
+
     cur.execute("""
         CREATE TABLE IF NOT EXISTS user_settings (
             username TEXT PRIMARY KEY,
             settings JSONB NOT NULL DEFAULT '{"theme": "light", "textScale": 1.0, "columnVisibility": {"title": true, "price": true}}'
         )
     """)
-    # Ensure default users exist with shared credentials
+
+    # Audit log table for tracking user actions
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id SERIAL PRIMARY KEY,
+            timestamp TIMESTAMP DEFAULT NOW(),
+            username TEXT,
+            action TEXT NOT NULL,
+            resource_type TEXT,
+            resource_id TEXT,
+            details JSONB,
+            ip_address TEXT
+        )
+    """)
+
+    # Company settings table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS company_settings (
+            key TEXT PRIMARY KEY,
+            value JSONB NOT NULL
+        )
+    """)
+
+    # Ensure default admin users exist
     cur.execute("DELETE FROM users WHERE username = %s", ("joey/alex",))
-    for username in ("joey", "alex"):
+    for username, role in [("joseph", "admin"), ("joey", "admin"), ("alex", "admin")]:
         cur.execute("""
-            INSERT INTO users (username, password)
-            VALUES (%s, %s)
-            ON CONFLICT (username) DO NOTHING
+            INSERT INTO users (username, password, role, is_active, created_at)
+            VALUES (%s, %s, %s, TRUE, NOW())
+            ON CONFLICT (username) DO UPDATE SET role = EXCLUDED.role
         """, (
             username,
-            bcrypt.hashpw("Winter2025$".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            bcrypt.hashpw("Winter2025$".encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
+            role
         ))
     conn.commit()
     cur.close()
@@ -137,7 +238,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 # Root endpoint for healthcheck
 @app.get("/")
 async def root():
-    return {"message": "NPP Deals Backend"}
+    return {"message": "NPP Office Furniture Backend"}
 
 # Pydantic models
 class Product(BaseModel):
@@ -146,23 +247,33 @@ class Product(BaseModel):
     vendor_id: Optional[str] = None
     vendor: Optional[str] = None
     price: Optional[float] = None
-    cost: Optional[float] = None
     moq: Optional[int] = None
     qty: Optional[int] = None
     upc: Optional[str] = None
-    asin: Optional[str] = None
+    sku: Optional[str] = None
     lead_time: Optional[str] = None
     exp_date: Optional[str] = None
     fob: Optional[str] = None
     image_url: Optional[str] = None
     out_of_stock: Optional[bool] = False
-    amazon_url: Optional[str] = None
-    walmart_url: Optional[str] = None
-    ebay_url: Optional[str] = None
     offer_date: Optional[datetime] = None
     last_sent: Optional[datetime] = None
-    sales_per_month: Optional[int] = None
-    net: Optional[float] = None
+    date_added: Optional[datetime] = None
+    # Furniture-specific fields
+    room_type: Optional[str] = None
+    style: Optional[str] = None
+    material: Optional[str] = None
+    color: Optional[str] = None
+    brand: Optional[str] = None
+    width: Optional[float] = None
+    depth: Optional[float] = None
+    height: Optional[float] = None
+    weight: Optional[float] = None
+    condition: Optional[str] = "New"
+    warranty: Optional[str] = None
+    assembly_required: Optional[bool] = False
+    features: Optional[List[str]] = None
+    secondary_images: Optional[List[str]] = None
 
 class ProductUpdate(BaseModel):
     title: Optional[str] = None
@@ -170,28 +281,96 @@ class ProductUpdate(BaseModel):
     vendor_id: Optional[str] = None
     vendor: Optional[str] = None
     price: Optional[float] = None
-    cost: Optional[float] = None
     moq: Optional[int] = None
     qty: Optional[int] = None
     upc: Optional[str] = None
-    asin: Optional[str] = None
+    sku: Optional[str] = None
     lead_time: Optional[str] = None
     exp_date: Optional[str] = None
     fob: Optional[str] = None
     image_url: Optional[str] = None
     out_of_stock: Optional[bool] = None
-    amazon_url: Optional[str] = None
-    walmart_url: Optional[str] = None
-    ebay_url: Optional[str] = None
     offer_date: Optional[datetime] = None
     last_sent: Optional[datetime] = None
-    sales_per_month: Optional[int] = None
-    net: Optional[float] = None
+    # Furniture-specific fields
+    room_type: Optional[str] = None
+    style: Optional[str] = None
+    material: Optional[str] = None
+    color: Optional[str] = None
+    brand: Optional[str] = None
+    width: Optional[float] = None
+    depth: Optional[float] = None
+    height: Optional[float] = None
+    weight: Optional[float] = None
+    condition: Optional[str] = None
+    warranty: Optional[str] = None
+    assembly_required: Optional[bool] = None
+    features: Optional[List[str]] = None
+    secondary_images: Optional[List[str]] = None
 
 class UserSettings(BaseModel):
     theme: Optional[str] = "light"
     textScale: Optional[float] = 1.0
     columnVisibility: Optional[dict] = {"title": True, "price": True}
+
+# User management models
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    email: Optional[str] = None
+    role: str = "viewer"  # admin, manager, sales, viewer
+
+class UserUpdate(BaseModel):
+    email: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = None  # For password reset
+
+class UserResponse(BaseModel):
+    username: str
+    email: Optional[str]
+    role: str
+    is_active: bool
+    created_at: Optional[datetime]
+    last_login: Optional[datetime]
+    created_by: Optional[str]
+
+class CompanySettingsUpdate(BaseModel):
+    company_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    address: Optional[str] = None
+    default_fob: Optional[str] = None
+    default_lead_time: Optional[str] = None
+    low_stock_threshold: Optional[int] = 5
+
+# Role permissions mapping
+ROLE_PERMISSIONS = {
+    "admin": ["read", "write", "delete", "manage_users", "manage_settings", "view_audit_logs"],
+    "manager": ["read", "write", "delete", "view_audit_logs"],
+    "sales": ["read", "send_emails", "download"],
+    "viewer": ["read"]
+}
+
+def check_permission(role: str, permission: str) -> bool:
+    """Check if a role has a specific permission"""
+    return permission in ROLE_PERMISSIONS.get(role, [])
+
+# Audit logging helper
+def log_audit(username: str, action: str, resource_type: str = None, resource_id: str = None, details: dict = None, ip_address: str = None):
+    """Log an action to the audit trail"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO audit_logs (username, action, resource_type, resource_id, details, ip_address)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (username, action, resource_type, resource_id, Json(details) if details else None, ip_address))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Audit log error: {e}")
 
 # Authentication
 def verify_password(plain_password, hashed_password):
@@ -222,25 +401,75 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         raise credentials_exception
     return username
 
+async def get_current_user_with_role(token: str = Depends(oauth2_scheme)):
+    """Get current user with their role information"""
+    username = await get_current_user(token)
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT username, role, is_active FROM users WHERE username = %s", (username,))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not user or not user.get("is_active", True):
+        raise HTTPException(status_code=403, detail="User account is disabled")
+    return {"username": user["username"], "role": user.get("role", "viewer")}
+
+def require_permission(permission: str):
+    """Dependency to check if user has required permission"""
+    async def check(user: dict = Depends(get_current_user_with_role)):
+        if not check_permission(user["role"], permission):
+            raise HTTPException(status_code=403, detail=f"Permission denied: requires '{permission}'")
+        return user
+    return check
+
 @app.post("/login")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT * FROM users WHERE username = %s", (form_data.username,))
     user = cur.fetchone()
-    cur.close()
-    conn.close()
+
     if not user or not verify_password(form_data.password, user["password"]):
+        log_audit(form_data.username, "login_failed", details={"reason": "invalid_credentials"})
+        cur.close()
+        conn.close()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Check if user is active
+    if not user.get("is_active", True):
+        log_audit(form_data.username, "login_failed", details={"reason": "account_disabled"})
+        cur.close()
+        conn.close()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is disabled. Contact administrator.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Update last login timestamp
+    cur.execute("UPDATE users SET last_login = NOW() WHERE username = %s", (user["username"],))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    # Log successful login
+    log_audit(user["username"], "login_success")
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user["username"]}, expires_delta=access_token_expires
+        data={"sub": user["username"], "role": user.get("role", "viewer")},
+        expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "username": user["username"],
+        "role": user.get("role", "viewer")
+    }
 
 # Product routes
 @app.get("/products")
@@ -252,6 +481,79 @@ async def get_products(current_user: str = Depends(get_current_user)):
     cur.close()
     conn.close()
     return {"products": products}
+
+def extract_unique_values(rows, field_name):
+    """Extract unique values from comma-separated fields.
+
+    For example, if products have room_type values like:
+    - "Office"
+    - "Office, Living Room"
+    - "Living Room, Bedroom"
+
+    This returns: ["Bedroom", "Living Room", "Office"]
+    """
+    unique_values = set()
+    for row in rows:
+        value = row[field_name]
+        if value:
+            # Split by comma and strip whitespace
+            parts = [p.strip() for p in value.split(",")]
+            for part in parts:
+                if part:  # Skip empty strings
+                    unique_values.add(part)
+    return sorted(list(unique_values))
+
+@app.get("/products/filters")
+async def get_product_filters():
+    """Get all available filter options from the database.
+
+    Supports comma-separated multi-values in fields like room_type, style, material, color.
+    For example, a product with room_type="Office, Living Room" will contribute both
+    "Office" and "Living Room" as separate filter options.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Get distinct values for each filter field
+    filters = {}
+
+    # Categories (single value, no comma parsing needed)
+    cur.execute("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category != '' AND out_of_stock = FALSE ORDER BY category")
+    filters["categories"] = [row["category"] for row in cur.fetchall()]
+
+    # Multi-value fields - fetch all values and parse comma-separated entries
+    cur.execute("SELECT room_type FROM products WHERE room_type IS NOT NULL AND room_type != '' AND out_of_stock = FALSE")
+    filters["room_types"] = extract_unique_values(cur.fetchall(), "room_type")
+
+    cur.execute("SELECT style FROM products WHERE style IS NOT NULL AND style != '' AND out_of_stock = FALSE")
+    filters["styles"] = extract_unique_values(cur.fetchall(), "style")
+
+    cur.execute("SELECT material FROM products WHERE material IS NOT NULL AND material != '' AND out_of_stock = FALSE")
+    filters["materials"] = extract_unique_values(cur.fetchall(), "material")
+
+    cur.execute("SELECT color FROM products WHERE color IS NOT NULL AND color != '' AND out_of_stock = FALSE")
+    filters["colors"] = extract_unique_values(cur.fetchall(), "color")
+
+    # Brands (single value typically, but support multi-value just in case)
+    cur.execute("SELECT brand FROM products WHERE brand IS NOT NULL AND brand != '' AND out_of_stock = FALSE")
+    filters["brands"] = extract_unique_values(cur.fetchall(), "brand")
+
+    # Conditions (single value, no comma parsing needed)
+    cur.execute("SELECT DISTINCT condition FROM products WHERE condition IS NOT NULL AND condition != '' AND out_of_stock = FALSE ORDER BY condition")
+    filters["conditions"] = [row["condition"] for row in cur.fetchall()]
+
+    # FOB locations (single value, no comma parsing needed)
+    cur.execute("SELECT DISTINCT fob FROM products WHERE fob IS NOT NULL AND fob != '' AND out_of_stock = FALSE ORDER BY fob")
+    filters["fob_locations"] = [row["fob"] for row in cur.fetchall()]
+
+    # Price range
+    cur.execute("SELECT MIN(price) as min_price, MAX(price) as max_price FROM products WHERE out_of_stock = FALSE AND price IS NOT NULL")
+    price_range = cur.fetchone()
+    filters["price_range"] = {"min": price_range["min_price"] or 0, "max": price_range["max_price"] or 10000}
+
+    cur.close()
+    conn.close()
+    return filters
 
 @app.get("/products/public")
 async def get_public_products():
@@ -303,23 +605,23 @@ async def get_products_by_category(category: str):
     return {"category": display_category, "products": simplified}
 
 @app.get("/products/check-duplicate")
-async def check_duplicate(asin: Optional[str] = None, upc: Optional[str] = None, current_user: str = Depends(get_current_user)):
-    """Check if a product with the given ASIN or UPC already exists"""
-    if not asin and not upc:
+async def check_duplicate(sku: Optional[str] = None, upc: Optional[str] = None, current_user: str = Depends(get_current_user)):
+    """Check if a product with the given SKU or UPC already exists"""
+    if not sku and not upc:
         return {"duplicate": False, "products": []}
 
     conn = get_db_connection()
     cur = conn.cursor()
 
     duplicates = []
-    if asin and asin.strip():
-        cur.execute("SELECT id, title, asin, upc, vendor FROM products WHERE asin = %s AND asin != ''", (asin.strip(),))
+    if sku and sku.strip():
+        cur.execute("SELECT id, title, sku, upc, vendor FROM products WHERE sku = %s AND sku != ''", (sku.strip(),))
         duplicates.extend(cur.fetchall())
 
     if upc and upc.strip():
-        cur.execute("SELECT id, title, asin, upc, vendor FROM products WHERE upc = %s AND upc != ''", (upc.strip(),))
+        cur.execute("SELECT id, title, sku, upc, vendor FROM products WHERE upc = %s AND upc != ''", (upc.strip(),))
         upc_dups = cur.fetchall()
-        # Avoid adding duplicates if same product matched by both ASIN and UPC
+        # Avoid adding duplicates if same product matched by both SKU and UPC
         existing_ids = {d['id'] for d in duplicates}
         duplicates.extend([d for d in upc_dups if d['id'] not in existing_ids])
 
@@ -349,18 +651,20 @@ async def create_product(product: Product, current_user: str = Depends(get_curre
 
     cur.execute("""
         INSERT INTO products (
-          title, category, vendor_id, vendor, price, cost, moq, qty, upc, asin, lead_time,
-          exp_date, fob, image_url, out_of_stock, amazon_url, walmart_url, ebay_url, offer_date,
-          last_sent, sales_per_month, net, date_added
+          title, category, vendor_id, vendor, price, moq, qty, upc, sku, lead_time,
+          exp_date, fob, image_url, out_of_stock, offer_date, last_sent, date_added,
+          room_type, style, material, color, brand, width, depth, height, weight,
+          condition, warranty, assembly_required, features, secondary_images
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
         """, (
-            product.title, product.category, product.vendor_id, product.vendor, product.price, product.cost,
-            product.moq, product.qty, product.upc, product.asin, product.lead_time, product.exp_date, product.fob,
-            product.image_url, product.out_of_stock, product.amazon_url, product.walmart_url, product.ebay_url,
-            offer_date, product.last_sent, product.sales_per_month, product.net,
-            current_est
+            product.title, product.category, product.vendor_id, product.vendor, product.price,
+            product.moq, product.qty, product.upc, product.sku, product.lead_time, product.exp_date, product.fob,
+            product.image_url, product.out_of_stock, offer_date, product.last_sent, current_est,
+            product.room_type, product.style, product.material, product.color, product.brand,
+            product.width, product.depth, product.height, product.weight,
+            product.condition, product.warranty, product.assembly_required, product.features, product.secondary_images
         ))
     product_id = cur.fetchone()['id']
     conn.commit()
@@ -389,9 +693,6 @@ async def update_product(id: int, product: ProductUpdate, current_user: str = De
     if product.price is not None:
         update_fields.append("price = %s")
         values.append(product.price)
-    if product.cost is not None:
-        update_fields.append("cost = %s")
-        values.append(product.cost)
     if product.moq is not None:
         update_fields.append("moq = %s")
         values.append(product.moq)
@@ -401,9 +702,9 @@ async def update_product(id: int, product: ProductUpdate, current_user: str = De
     if product.upc is not None:
         update_fields.append("upc = %s")
         values.append(product.upc)
-    if product.asin is not None:
-        update_fields.append("asin = %s")
-        values.append(product.asin)
+    if product.sku is not None:
+        update_fields.append("sku = %s")
+        values.append(product.sku)
     if product.lead_time is not None:
         update_fields.append("lead_time = %s")
         values.append(product.lead_time)
@@ -419,27 +720,55 @@ async def update_product(id: int, product: ProductUpdate, current_user: str = De
     if product.out_of_stock is not None:
         update_fields.append("out_of_stock = %s")
         values.append(product.out_of_stock)
-    if product.amazon_url is not None:
-        update_fields.append("amazon_url = %s")
-        values.append(product.amazon_url)
-    if product.walmart_url is not None:
-        update_fields.append("walmart_url = %s")
-        values.append(product.walmart_url)
-    if product.ebay_url is not None:
-        update_fields.append("ebay_url = %s")
-        values.append(product.ebay_url)
     if product.offer_date is not None:
         update_fields.append("offer_date = %s")
         values.append(product.offer_date)
     if product.last_sent is not None:
         update_fields.append("last_sent = %s")
         values.append(product.last_sent)
-    if product.sales_per_month is not None:
-        update_fields.append("sales_per_month = %s")
-        values.append(product.sales_per_month)
-    if product.net is not None:
-        update_fields.append("net = %s")
-        values.append(product.net)
+    # Furniture-specific fields
+    if product.room_type is not None:
+        update_fields.append("room_type = %s")
+        values.append(product.room_type)
+    if product.style is not None:
+        update_fields.append("style = %s")
+        values.append(product.style)
+    if product.material is not None:
+        update_fields.append("material = %s")
+        values.append(product.material)
+    if product.color is not None:
+        update_fields.append("color = %s")
+        values.append(product.color)
+    if product.brand is not None:
+        update_fields.append("brand = %s")
+        values.append(product.brand)
+    if product.width is not None:
+        update_fields.append("width = %s")
+        values.append(product.width)
+    if product.depth is not None:
+        update_fields.append("depth = %s")
+        values.append(product.depth)
+    if product.height is not None:
+        update_fields.append("height = %s")
+        values.append(product.height)
+    if product.weight is not None:
+        update_fields.append("weight = %s")
+        values.append(product.weight)
+    if product.condition is not None:
+        update_fields.append("condition = %s")
+        values.append(product.condition)
+    if product.warranty is not None:
+        update_fields.append("warranty = %s")
+        values.append(product.warranty)
+    if product.assembly_required is not None:
+        update_fields.append("assembly_required = %s")
+        values.append(product.assembly_required)
+    if product.features is not None:
+        update_fields.append("features = %s")
+        values.append(product.features)
+    if product.secondary_images is not None:
+        update_fields.append("secondary_images = %s")
+        values.append(product.secondary_images)
     if not update_fields:
         cur.close()
         conn.close()
@@ -495,7 +824,7 @@ async def search_products(query: str, current_user: str = Depends(get_current_us
         OR category ILIKE %s
         OR vendor ILIKE %s
         OR upc ILIKE %s
-        OR asin ILIKE %s
+        OR sku ILIKE %s
         ORDER BY date_added DESC
     """, (search_query, search_query, search_query, search_query, search_query))
     products = cur.fetchall()
@@ -517,15 +846,13 @@ async def import_products(file: UploadFile = File(...), current_user: str = Depe
         raise HTTPException(status_code=400, detail="CSV file is missing headers")
     field_map = {
         "date": "offer_date",
-        "offer date": "offer_date",  # Accept both "date" and "offer date"
+        "offer date": "offer_date",
         "last sent": "last_sent",
-        "amazon url": "amazon_url",
-        "asin": "asin",
+        "sku": "sku",
         "price": "price",
         "moq": "moq",
         "qty": "qty",
         "upc": "upc",
-        "cost": "cost",
         "vendor": "vendor",
         "lead time": "lead_time",
         "exp date": "exp_date",
@@ -534,24 +861,33 @@ async def import_products(file: UploadFile = File(...), current_user: str = Depe
         "image url": "image_url",
         "title": "title",
         "category": "category",
-        "walmart url": "walmart_url",
-        "ebay url": "ebay_url",
-        "sales per month": "sales_per_month",
-        "net": "net",
-        "out of stock": "out_of_stock"
+        "out of stock": "out_of_stock",
+        # Furniture-specific fields
+        "room type": "room_type",
+        "style": "style",
+        "material": "material",
+        "color": "color",
+        "brand": "brand",
+        "width": "width",
+        "depth": "depth",
+        "height": "height",
+        "weight": "weight",
+        "condition": "condition",
+        "warranty": "warranty",
+        "assembly required": "assembly_required",
     }
-    float_fields = {"price", "cost", "net", "sales_per_month"}
+    float_fields = {"price", "width", "depth", "height", "weight"}
     int_fields = {"moq", "qty"}
-    bool_fields = {"out_of_stock"}
+    bool_fields = {"out_of_stock", "assembly_required"}
     conn = get_db_connection()
     cur = conn.cursor()
     inserted = updated = skipped = 0
     for raw_row in reader:
         row = {(key or "").strip(): (value or "").strip() for key, value in raw_row.items()}
         normalized = {key.lower(): value for key, value in row.items() if key}
-        asin_value = normalized.get("asin") or None
+        sku_value = normalized.get("sku") or None
         title_value = normalized.get("title") or None
-        if not asin_value and not title_value:
+        if not sku_value and not title_value:
             skipped += 1
             continue
         record = {}
@@ -595,8 +931,8 @@ async def import_products(file: UploadFile = File(...), current_user: str = Depe
             else:
                 record[column] = value
         product_id = None
-        if asin_value:
-            cur.execute("SELECT id FROM products WHERE asin = %s", (asin_value,))
+        if sku_value:
+            cur.execute("SELECT id FROM products WHERE sku = %s", (sku_value,))
             match = cur.fetchone()
             if match:
                 product_id = match["id"]
@@ -639,11 +975,6 @@ async def import_products(file: UploadFile = File(...), current_user: str = Depe
     cur.close()
     conn.close()
     return {"inserted": inserted, "updated": updated, "skipped": skipped}
-
-class UserSettings(BaseModel):
-    theme: Optional[str] = "light"
-    textScale: Optional[float] = 1.0
-    columnVisibility: Optional[dict] = {"title": True, "price": True}
 
 @app.get("/user/settings")
 async def get_user_settings(current_user: str = Depends(get_current_user)):
@@ -697,7 +1028,7 @@ def send_invoice_email(customer_info: dict, products: list):
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER", "")
     smtp_pass = os.getenv("SMTP_PASS", "")
-    recipient_email = os.getenv("INVOICE_RECIPIENT", "sales@nppwholesale.com")
+    recipient_email = os.getenv("INVOICE_RECIPIENT", "sales@npp-office-furniture.com")
 
     if not smtp_user or not smtp_pass:
         print("SMTP credentials not configured, skipping email")
@@ -721,7 +1052,7 @@ def send_invoice_email(customer_info: dict, products: list):
     <html>
     <body style="font-family: Arial, sans-serif; color: #333;">
         <div style="background: #003087; color: white; padding: 20px; text-align: center;">
-            <h1 style="margin: 0;">New Invoice Request</h1>
+            <h1 style="margin: 0;">New Quote Request - NPP Office Furniture</h1>
         </div>
         <div style="padding: 20px;">
             <h2 style="color: #003087;">Customer Information</h2>
@@ -750,7 +1081,7 @@ def send_invoice_email(customer_info: dict, products: list):
             </table>
 
             <p style="color: #666; font-size: 12px;">
-                This request was submitted on {datetime.now().strftime('%B %d, %Y at %I:%M %p')} via the NPP Live Catalog.
+                This request was submitted on {datetime.now().strftime('%B %d, %Y at %I:%M %p')} via the NPP Office Furniture Catalog.
             </p>
         </div>
     </body>
@@ -758,7 +1089,7 @@ def send_invoice_email(customer_info: dict, products: list):
     """
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"Invoice Request from {customer_info.get('name', 'Customer')} - {len(products)} Products"
+    msg["Subject"] = f"Quote Request from {customer_info.get('name', 'Customer')} - {len(products)} Products"
     msg["From"] = smtp_user
     msg["To"] = recipient_email
     msg["Reply-To"] = customer_info.get('email', smtp_user)
@@ -810,4 +1141,285 @@ async def request_invoice(request: InvoiceRequest):
         "email_sent": email_sent,
     }
 
+
+# ============= USER MANAGEMENT ENDPOINTS =============
+
+@app.get("/admin/users")
+async def list_users(user: dict = Depends(require_permission("manage_users"))):
+    """List all users (admin only)"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT username, email, role, is_active, created_at, last_login, created_by
+        FROM users ORDER BY created_at DESC
+    """)
+    users = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {"users": users}
+
+@app.post("/admin/users")
+async def create_user(new_user: UserCreate, user: dict = Depends(require_permission("manage_users"))):
+    """Create a new user (admin only)"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Check if username already exists
+    cur.execute("SELECT username FROM users WHERE username = %s", (new_user.username,))
+    if cur.fetchone():
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    # Validate role
+    if new_user.role not in ROLE_PERMISSIONS:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {list(ROLE_PERMISSIONS.keys())}")
+
+    # Hash password and create user
+    hashed_password = bcrypt.hashpw(new_user.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    cur.execute("""
+        INSERT INTO users (username, password, email, role, is_active, created_at, created_by)
+        VALUES (%s, %s, %s, %s, TRUE, NOW(), %s)
+    """, (new_user.username, hashed_password, new_user.email, new_user.role, user["username"]))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    # Log the action
+    log_audit(user["username"], "user_created", "user", new_user.username,
+              {"role": new_user.role, "email": new_user.email})
+
+    return {"message": f"User '{new_user.username}' created successfully", "username": new_user.username}
+
+@app.get("/admin/users/{username}")
+async def get_user(username: str, user: dict = Depends(require_permission("manage_users"))):
+    """Get a specific user's details (admin only)"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT username, email, role, is_active, created_at, last_login, created_by
+        FROM users WHERE username = %s
+    """, (username,))
+    user_data = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not user_data:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return user_data
+
+@app.patch("/admin/users/{username}")
+async def update_user(username: str, user_update: UserUpdate, user: dict = Depends(require_permission("manage_users"))):
+    """Update a user's details (admin only)"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Check if user exists
+    cur.execute("SELECT username FROM users WHERE username = %s", (username,))
+    if not cur.fetchone():
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Prevent admin from disabling themselves
+    if username == user["username"] and user_update.is_active is False:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=400, detail="Cannot disable your own account")
+
+    # Build update query
+    updates = []
+    values = []
+
+    if user_update.email is not None:
+        updates.append("email = %s")
+        values.append(user_update.email)
+
+    if user_update.role is not None:
+        if user_update.role not in ROLE_PERMISSIONS:
+            cur.close()
+            conn.close()
+            raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {list(ROLE_PERMISSIONS.keys())}")
+        # Prevent admin from demoting themselves
+        if username == user["username"] and user_update.role != "admin":
+            cur.close()
+            conn.close()
+            raise HTTPException(status_code=400, detail="Cannot change your own role")
+        updates.append("role = %s")
+        values.append(user_update.role)
+
+    if user_update.is_active is not None:
+        updates.append("is_active = %s")
+        values.append(user_update.is_active)
+
+    if user_update.password is not None:
+        hashed_password = bcrypt.hashpw(user_update.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        updates.append("password = %s")
+        values.append(hashed_password)
+
+    if updates:
+        values.append(username)
+        cur.execute(f"UPDATE users SET {', '.join(updates)} WHERE username = %s", values)
+        conn.commit()
+
+        # Log the action
+        log_audit(user["username"], "user_updated", "user", username,
+                  {"changes": user_update.dict(exclude_none=True, exclude={"password"})})
+
+    cur.close()
+    conn.close()
+
+    return {"message": f"User '{username}' updated successfully"}
+
+@app.delete("/admin/users/{username}")
+async def delete_user(username: str, user: dict = Depends(require_permission("manage_users"))):
+    """Delete a user (admin only)"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Prevent admin from deleting themselves
+    if username == user["username"]:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+
+    # Check if user exists
+    cur.execute("SELECT username FROM users WHERE username = %s", (username,))
+    if not cur.fetchone():
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Delete user settings first (foreign key constraint)
+    cur.execute("DELETE FROM user_settings WHERE username = %s", (username,))
+    # Delete user
+    cur.execute("DELETE FROM users WHERE username = %s", (username,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    # Log the action
+    log_audit(user["username"], "user_deleted", "user", username)
+
+    return {"message": f"User '{username}' deleted successfully"}
+
+# ============= AUDIT LOG ENDPOINTS =============
+
+@app.get("/admin/audit-logs")
+async def get_audit_logs(
+    limit: int = 100,
+    offset: int = 0,
+    username: Optional[str] = None,
+    action: Optional[str] = None,
+    user: dict = Depends(require_permission("view_audit_logs"))
+):
+    """Get audit logs (admin/manager only)"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    query = "SELECT * FROM audit_logs WHERE 1=1"
+    params = []
+
+    if username:
+        query += " AND username = %s"
+        params.append(username)
+    if action:
+        query += " AND action LIKE %s"
+        params.append(f"%{action}%")
+
+    query += " ORDER BY timestamp DESC LIMIT %s OFFSET %s"
+    params.extend([limit, offset])
+
+    cur.execute(query, params)
+    logs = cur.fetchall()
+
+    # Get total count
+    count_query = "SELECT COUNT(*) as count FROM audit_logs WHERE 1=1"
+    count_params = []
+    if username:
+        count_query += " AND username = %s"
+        count_params.append(username)
+    if action:
+        count_query += " AND action LIKE %s"
+        count_params.append(f"%{action}%")
+
+    cur.execute(count_query, count_params)
+    total = cur.fetchone()["count"]
+
+    cur.close()
+    conn.close()
+
+    return {"logs": logs, "total": total, "limit": limit, "offset": offset}
+
+# ============= COMPANY SETTINGS ENDPOINTS =============
+
+@app.get("/admin/company-settings")
+async def get_company_settings(user: dict = Depends(require_permission("manage_settings"))):
+    """Get company settings (admin only)"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT key, value FROM company_settings")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    # Convert to dictionary
+    settings = {}
+    for row in rows:
+        settings[row["key"]] = row["value"]
+
+    return settings
+
+@app.patch("/admin/company-settings")
+async def update_company_settings(settings: CompanySettingsUpdate, user: dict = Depends(require_permission("manage_settings"))):
+    """Update company settings (admin only)"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Update each non-null setting
+    settings_dict = settings.dict(exclude_none=True)
+    for key, value in settings_dict.items():
+        cur.execute("""
+            INSERT INTO company_settings (key, value)
+            VALUES (%s, %s)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """, (key, Json(value)))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    # Log the action
+    log_audit(user["username"], "company_settings_updated", "settings", None, settings_dict)
+
+    return {"message": "Company settings updated", "settings": settings_dict}
+
+# ============= CURRENT USER INFO ENDPOINT =============
+
+@app.get("/user/me")
+async def get_current_user_info(current_user: str = Depends(get_current_user)):
+    """Get current user's info including role"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT username, email, role, is_active, created_at, last_login
+        FROM users WHERE username = %s
+    """, (current_user,))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Add permissions based on role
+    user_dict = dict(user)
+    user_dict["permissions"] = ROLE_PERMISSIONS.get(user["role"], [])
+
+    return user_dict
 

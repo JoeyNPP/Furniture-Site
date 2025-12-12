@@ -37,20 +37,21 @@ export async function sendIndividualEmails(selectedProducts) {
       // Leave as is
     }
 
-    // Build the email body (matches your Python formatting)
-    const emailBody = buildPythonStyleEmail({
+    // Build the email body
+    const emailBody = buildFurnitureEmail({
       subject: product.title || "",
-      amazonUrl: product.amazon_url || "",
-      walmartUrl: product.walmart_url || "",
-      ebayUrl: product.ebay_url || "",
       imageUrl: product.image_url || "",
       price,
       moq: product.moq || "0",
       qty: product.qty || "0",
-      asin: product.asin || "",
+      sku: product.sku || "",
       fob: product.fob || "",
-      expDate: product.exp_date || "",
       leadTime,
+      brand: product.brand || "",
+      material: product.material || "",
+      color: product.color || "",
+      dimensions: formatDimensions(product),
+      condition: product.condition || "",
     });
 
     const emailData = {
@@ -112,19 +113,20 @@ export async function sendGroupEmail(selectedProducts) {
       // Leave as is
     }
 
-    combinedHTML += buildPythonStyleEmail({
+    combinedHTML += buildFurnitureEmail({
       subject: product.title || "",
-      amazonUrl: product.amazon_url || "",
-      walmartUrl: product.walmart_url || "",
-      ebayUrl: product.ebay_url || "",
       imageUrl: product.image_url || "",
       price,
       moq: product.moq || "0",
       qty: product.qty || "0",
-      asin: product.asin || "",
+      sku: product.sku || "",
       fob: product.fob || "",
-      expDate: product.exp_date || "",
       leadTime,
+      brand: product.brand || "",
+      material: product.material || "",
+      color: product.color || "",
+      dimensions: formatDimensions(product),
+      condition: product.condition || "",
     });
 
     combinedHTML += "<hr>";
@@ -184,53 +186,51 @@ async function updateLastSent(productId) {
 }
 
 /**
- * Build the Email EXACTLY Like Python Code
+ * Format dimensions helper
  */
-function buildPythonStyleEmail({
+function formatDimensions(product) {
+  const parts = [];
+  if (product.width) parts.push(`${product.width}"W`);
+  if (product.depth) parts.push(`${product.depth}"D`);
+  if (product.height) parts.push(`${product.height}"H`);
+  return parts.join(" x ");
+}
+
+/**
+ * Build Furniture Email
+ */
+function buildFurnitureEmail({
   subject,
-  amazonUrl,
-  walmartUrl,
-  ebayUrl,
   imageUrl,
   price,
   moq,
   qty,
-  asin,
+  sku,
   fob,
-  expDate,
   leadTime,
+  brand,
+  material,
+  color,
+  dimensions,
+  condition,
 }) {
   let emailBody = `
     <div style="text-align:center; padding:20px;">
         <h2 style="font-size:18px; margin-bottom:20px;">${subject}</h2>
         <img src="${imageUrl}" alt="${subject}" style="max-width:300px; max-height:300px; object-fit:contain; display:block; margin:auto; margin-top:40px; margin-bottom:40px;"/>
+        <p style="font-size:18px; margin-top:40px;">$${price} EA, MOQ ${moq}, ${qty} Available.</p>
   `;
 
-  if (amazonUrl.includes("https")) {
-    emailBody += `
-            <a href="${amazonUrl}" style="background-color:#FF9900; color:white; padding:15px 25px; text-decoration:none; display:inline-block; font-size:16px; margin:5px; border-radius:5px;">Amazon Link</a>
-    `;
-  }
-  if (walmartUrl.includes("https")) {
-    emailBody += `
-            <a href="${walmartUrl}" style="background-color:#0071CE; color:white; padding:15px 25px; text-decoration:none; display:inline-block; font-size:16px; margin:5px; border-radius:5px;">Walmart Link</a>
-    `;
-  }
-  if (ebayUrl.includes("https")) {
-    emailBody += `
-            <a href="${ebayUrl}" style="background-color:#E53238; color:white; padding:15px 25px; text-decoration:none; display:inline-block; font-size:16px; margin:5px; border-radius:5px;">eBay Link</a>
-    `;
-  }
-
-  emailBody += `
-            <p style="font-size:18px; margin-top:40px;">$${price} EA, MOQ ${moq}, ${qty} Available.</p>
-            <p style="font-size:18px;">ASIN: ${asin}</p>
-  `;
-
+  if (sku) emailBody += `<p style="font-size:18px;">SKU: ${sku}</p>`;
+  if (brand) emailBody += `<p style="font-size:18px;">Brand: ${brand}</p>`;
+  if (material) emailBody += `<p style="font-size:18px;">Material: ${material}</p>`;
+  if (color) emailBody += `<p style="font-size:18px;">Color: ${color}</p>`;
+  if (dimensions) emailBody += `<p style="font-size:18px;">Dimensions: ${dimensions}</p>`;
+  if (condition) emailBody += `<p style="font-size:18px;">Condition: ${condition}</p>`;
   if (fob) emailBody += `<p style="font-size:18px;">FOB: ${fob}</p>`;
-  if (expDate) emailBody += `<p style="font-size:18px;">Expiration Date: ${expDate}</p>`;
+  if (leadTime) emailBody += `<p style="font-size:18px;">Lead Time: ${leadTime}</p>`;
 
-  emailBody += `<p style="font-size:18px;">Lead Time: ${leadTime}</p></div>`;
+  emailBody += `</div>`;
 
   return emailBody;
 }

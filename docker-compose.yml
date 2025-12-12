@@ -1,46 +1,46 @@
 version: '3.3'
 
 services:
-  npp_deals-db:
+  npp_furniture-db:
     image: postgres:13
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 26,Sheetpans!
-      POSTGRES_DB: npp_deals
+      POSTGRES_DB: npp_furniture
       TZ: America/New_York
     volumes:
       - pgdata:/var/lib/postgresql/data
-    container_name: npp_deals_npp_deals-db-1
-  npp_deals-backend:
+    container_name: npp_furniture-db-1
+  npp_furniture-backend:
     build: ./backend
     environment:
-      DB_NAME: npp_deals
+      DB_NAME: npp_furniture
       DB_USER: postgres
       DB_PASSWORD: 26,Sheetpans!
-      DB_HOST: npp_deals-db
+      DB_HOST: npp_furniture-db
       DB_PORT: 5432
       SECRET_KEY: a-very-strong-secret-key
       TZ: America/New_York
     ports:
-      - "8000:8000"
+      - "8002:8000"
     depends_on:
-      - npp_deals-db
-    container_name: npp_deals_npp_deals-backend-1
-  npp_deals-frontend:
+      - npp_furniture-db
+    container_name: npp_furniture-backend-1
+  npp_furniture-frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        REACT_APP_FRONTEND_URL: http://104.131.49.141:8000
+        REACT_APP_FRONTEND_URL: http://localhost:8002
     environment:
       TZ: America/New_York
     ports:
-      - "80:80"
-      - "443:443"
+      - "3002:80"
+      - "3444:443"
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
-      - npp_deals-backend
-    container_name: npp_deals_npp_deals-frontend-1
+      - npp_furniture-backend
+    container_name: npp_furniture-frontend-1
 volumes:
   pgdata:

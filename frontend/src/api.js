@@ -70,6 +70,22 @@ async function fetchPublicProducts() {
   }
 }
 
+async function fetchProductFilters() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/products/filters`, {
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Fetch product filters error:", error);
+    throw error;
+  }
+}
+
 async function createProduct(data) {
   const token = requireToken();
   try {
@@ -203,11 +219,11 @@ async function searchProducts(query) {
   }
 }
 
-async function checkDuplicate(asin, upc) {
+async function checkDuplicate(sku, upc) {
   const token = requireToken();
   try {
     const params = new URLSearchParams();
-    if (asin) params.append("asin", asin);
+    if (sku) params.append("sku", sku);
     if (upc) params.append("upc", upc);
     const response = await fetch(`${API_BASE_URL}/products/check-duplicate?${params}`, {
       headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
@@ -299,10 +315,156 @@ async function requestInvoice(customerInfo, productIds) {
   }
 }
 
+// ============ Admin User Management API ============
+
+async function fetchUsers() {
+  const token = requireToken();
+  try {
+    const response = await fetch(`${API_BASE_URL}/admin/users`, {
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Fetch users error:", error);
+    throw error;
+  }
+}
+
+async function createUser(userData) {
+  const token = requireToken();
+  try {
+    const response = await fetch(`${API_BASE_URL}/admin/users`, {
+      method: "POST",
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
+      body: JSON.stringify(userData),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Create user error:", error);
+    throw error;
+  }
+}
+
+async function updateUser(username, userData) {
+  const token = requireToken();
+  try {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${encodeURIComponent(username)}`, {
+      method: "PATCH",
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
+      body: JSON.stringify(userData),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error(`Update user error for ${username}:`, error);
+    throw error;
+  }
+}
+
+async function deleteUser(username) {
+  const token = requireToken();
+  try {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${encodeURIComponent(username)}`, {
+      method: "DELETE",
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error(`Delete user error for ${username}:`, error);
+    throw error;
+  }
+}
+
+async function fetchAuditLogs(limit = 100, offset = 0) {
+  const token = requireToken();
+  try {
+    const response = await fetch(`${API_BASE_URL}/admin/audit-logs?limit=${limit}&offset=${offset}`, {
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Fetch audit logs error:", error);
+    throw error;
+  }
+}
+
+async function fetchCompanySettings() {
+  const token = requireToken();
+  try {
+    const response = await fetch(`${API_BASE_URL}/admin/company-settings`, {
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Fetch company settings error:", error);
+    throw error;
+  }
+}
+
+async function updateCompanySettings(settings) {
+  const token = requireToken();
+  try {
+    const response = await fetch(`${API_BASE_URL}/admin/company-settings`, {
+      method: "PATCH",
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
+      body: JSON.stringify(settings),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Update company settings error:", error);
+    throw error;
+  }
+}
+
+async function fetchCurrentUser() {
+  const token = requireToken();
+  try {
+    const response = await fetch(`${API_BASE_URL}/user/me`, {
+      headers: withAuthHeaders(token, { "Content-Type": "application/json" }),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Fetch current user error:", error);
+    throw error;
+  }
+}
+
 export {
   login,
   fetchProducts,
   fetchPublicProducts,
+  fetchProductFilters,
   fetchProductsByCategory,
   createProduct,
   updateProduct,
@@ -312,4 +474,13 @@ export {
   uploadProducts,
   requestInvoice,
   checkDuplicate,
+  // Admin functions
+  fetchUsers,
+  createUser,
+  updateUser,
+  deleteUser,
+  fetchAuditLogs,
+  fetchCompanySettings,
+  updateCompanySettings,
+  fetchCurrentUser,
 };
