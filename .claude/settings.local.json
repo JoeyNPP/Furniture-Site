@@ -41,7 +41,10 @@
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqb2V5IiwiZXhwIjoxNzY1NTI4NzkxfQ.vvawD0Ad6Q0TuP4xSD8mTmbEvZ862UR5NKVHtXOo3VY\")",
       "Bash(grep:*)",
       "Bash(git remote:*)",
-      "Bash(git remote add:*)"
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(ssh:*)",
+      "Bash(scp:*)"
     ],
     "deny": [],
     "ask": []

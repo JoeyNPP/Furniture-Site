@@ -119,7 +119,7 @@ const InternalProductList = ({ onBack }) => {
   const [showVendorPerformance, setShowVendorPerformance] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [vendorFilter, setVendorFilter] = useState("");
+  const [brandFilter, setBrandFilter] = useState("");
   const [stockFilter, setStockFilter] = useState(settings.defaultStockFilter || "in");
   const [pageSize, setPageSize] = useState(50);
   const [columnVisibilityModel, setColumnVisibilityModel] = useState(settings.columnVisibility || {});
@@ -338,9 +338,9 @@ const InternalProductList = ({ onBack }) => {
         (p) => (p.category || "").toLowerCase() === categoryFilter.toLowerCase()
       );
     }
-    if (vendorFilter) {
+    if (brandFilter) {
       temp = temp.filter(
-        (p) => (p.vendor || "").toLowerCase() === vendorFilter.toLowerCase()
+        (p) => (p.brand || "").toLowerCase() === brandFilter.toLowerCase()
       );
     }
     if (stockFilter === "in") {
@@ -353,7 +353,7 @@ const InternalProductList = ({ onBack }) => {
 
   const resetFilters = () => {
     setCategoryFilter("");
-    setVendorFilter("");
+    setBrandFilter("");
     setStockFilter("in");
     setFilteredProducts(products.filter((p) => p.out_of_stock === false));
   };
@@ -1329,17 +1329,17 @@ const InternalProductList = ({ onBack }) => {
 
         <Divider sx={{ my: 2 }} />
 
-        {/* Vendor Filter */}
+        {/* Brand Filter */}
         <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: settings.theme === "dark" ? "#90caf9" : "#003087" }}>
-          Vendor
+          Brand
         </Typography>
         <TextField
           fullWidth
           size="small"
-          label="Vendor Name"
-          value={vendorFilter}
-          onChange={(e) => setVendorFilter(e.target.value)}
-          placeholder="e.g., Vendor A"
+          label="Brand Name"
+          value={brandFilter}
+          onChange={(e) => setBrandFilter(e.target.value)}
+          placeholder="e.g., Ashley"
           sx={{ mb: 2 }}
         />
 
@@ -1550,7 +1550,7 @@ const InternalProductList = ({ onBack }) => {
               }}
             >
               <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, fontWeight: 600 }}>
-                Inventory Summary {categoryFilter || vendorFilter || searchQuery ? "(Filtered)" : ""}
+                Inventory Summary {categoryFilter || brandFilter || searchQuery ? "(Filtered)" : ""}
               </Typography>
               <Grid container spacing={2}>
                 {/* Total Products */}

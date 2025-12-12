@@ -69,6 +69,7 @@ const Catalog = () => {
   const [selectedMaterials, setSelectedMaterials] = useState({});
   const [selectedColors, setSelectedColors] = useState({});
   const [selectedConditions, setSelectedConditions] = useState({});
+  const [selectedBrands, setSelectedBrands] = useState({});
   const [priceRange, setPriceRange] = useState([0, 10000]);
   const [activeFiltersCount, setActiveFiltersCount] = useState(0);
 
@@ -80,6 +81,7 @@ const Catalog = () => {
     materials: [],
     colors: [],
     conditions: [],
+    brands: [],
     fob_locations: [],
     price_range: { min: 0, max: 10000 },
   });
@@ -160,10 +162,11 @@ const Catalog = () => {
     if (Object.values(selectedMaterials).some(Boolean)) count++;
     if (Object.values(selectedColors).some(Boolean)) count++;
     if (Object.values(selectedConditions).some(Boolean)) count++;
+    if (Object.values(selectedBrands).some(Boolean)) count++;
     if (Object.values(selectedFobs).some(Boolean)) count++;
     if (priceRange[0] > (filterOptions.price_range?.min || 0) || priceRange[1] < (filterOptions.price_range?.max || 10000)) count++;
     setActiveFiltersCount(count);
-  }, [selectedCategories, selectedRoomTypes, selectedStyles, selectedMaterials, selectedColors, selectedConditions, selectedFobs, priceRange, filterOptions]);
+  }, [selectedCategories, selectedRoomTypes, selectedStyles, selectedMaterials, selectedColors, selectedConditions, selectedBrands, selectedFobs, priceRange, filterOptions]);
 
   useEffect(() => {
     let result = products;
@@ -206,6 +209,9 @@ const Catalog = () => {
     const activeConditions = Object.keys(selectedConditions).filter((k) => selectedConditions[k]);
     if (activeConditions.length) result = result.filter((p) => p.condition && activeConditions.includes(p.condition));
 
+    const activeBrands = Object.keys(selectedBrands).filter((k) => selectedBrands[k]);
+    if (activeBrands.length) result = result.filter((p) => p.brand && activeBrands.includes(p.brand));
+
     const activeFobs = Object.keys(selectedFobs).filter((k) => selectedFobs[k]);
     if (activeFobs.length) result = result.filter((p) => p.fob && activeFobs.includes(p.fob));
 
@@ -238,7 +244,7 @@ const Catalog = () => {
     });
 
     setFiltered(result);
-  }, [search, selectedCategories, selectedRoomTypes, selectedStyles, selectedMaterials, selectedColors, selectedConditions, selectedFobs, showInStockOnly, products, priceRange, sortBy, filterOptions]);
+  }, [search, selectedCategories, selectedRoomTypes, selectedStyles, selectedMaterials, selectedColors, selectedConditions, selectedBrands, selectedFobs, showInStockOnly, products, priceRange, sortBy, filterOptions]);
 
   // Derive filter options from products (fallback if API doesn't have data yet)
   const categories = filterOptions.categories.length > 0
@@ -259,6 +265,9 @@ const Catalog = () => {
   const conditions = filterOptions.conditions.length > 0
     ? filterOptions.conditions
     : ["New", "Refurbished", "Used"];
+  const brands = filterOptions.brands.length > 0
+    ? filterOptions.brands
+    : [...new Set(products.map((p) => p.brand).filter(Boolean))].sort();
   const fobPorts = filterOptions.fob_locations.length > 0
     ? filterOptions.fob_locations
     : [...new Set(products.map((p) => p.fob).filter(Boolean))].sort();
@@ -276,6 +285,8 @@ const Catalog = () => {
       setSelectedColors((prev) => ({ ...prev, [value]: !prev[value] }));
     } else if (type === "condition") {
       setSelectedConditions((prev) => ({ ...prev, [value]: !prev[value] }));
+    } else if (type === "brand") {
+      setSelectedBrands((prev) => ({ ...prev, [value]: !prev[value] }));
     } else if (type === "fob") {
       setSelectedFobs((prev) => ({ ...prev, [value]: !prev[value] }));
     }
@@ -289,6 +300,7 @@ const Catalog = () => {
     setSelectedMaterials({});
     setSelectedColors({});
     setSelectedConditions({});
+    setSelectedBrands({});
     setSelectedFobs({});
     setPriceRange([filterOptions.price_range?.min || 0, filterOptions.price_range?.max || 10000]);
     setSearch("");
@@ -763,6 +775,38 @@ const Catalog = () => {
                           />
                         }
                         label={<Typography variant="body2" sx={{ fontSize: "0.8rem" }}>{cond}</Typography>}
+                      />
+                    ))}
+                  </FormGroup>
+                </AccordionDetails>
+              </Accordion>
+            )}
+
+            {/* Brand Accordion */}
+            {brands.length > 0 && (
+              <Accordion disableGutters sx={{ boxShadow: "none", "&:before": { display: "none" } }}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, px: 1 }}>
+                  <Typography sx={{ fontWeight: 600, color: "#003087", fontSize: "0.875rem" }}>
+                    Brand
+                    {Object.values(selectedBrands).some(Boolean) && (
+                      <Chip size="small" label={Object.values(selectedBrands).filter(Boolean).length} sx={{ ml: 1, height: 18, fontSize: "0.7rem" }} color="primary" />
+                    )}
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails sx={{ px: 1, pt: 0, maxHeight: 150, overflow: "auto" }}>
+                  <FormGroup>
+                    {brands.map((brand) => (
+                      <FormControlLabel
+                        key={brand}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={!!selectedBrands[brand]}
+                            onChange={() => toggleItem("brand", brand)}
+                            sx={{ color: "#003087", "&.Mui-checked": { color: "#003087" }, py: 0.25 }}
+                          />
+                        }
+                        label={<Typography variant="body2" sx={{ fontSize: "0.8rem" }}>{brand}</Typography>}
                       />
                     ))}
                   </FormGroup>
