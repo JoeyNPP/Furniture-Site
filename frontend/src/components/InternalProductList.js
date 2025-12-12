@@ -1339,7 +1339,8 @@ const InternalProductList = ({ onBack }) => {
           label="Brand Name"
           value={brandFilter}
           onChange={(e) => setBrandFilter(e.target.value)}
-          placeholder="e.g., Ashley"
+          autoComplete="off"
+          inputProps={{ autoComplete: "off" }}
           sx={{ mb: 2 }}
         />
 
