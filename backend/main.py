@@ -134,6 +134,7 @@ def init_db():
         """)
         conn.commit()
     except Exception as e:
+        conn.rollback()  # Rollback failed transaction so subsequent queries work
         print(f"SKU migration note: {e}")
         pass  # asin column might not exist in new databases
     # Enhanced users table with roles and metadata
