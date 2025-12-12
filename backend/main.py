@@ -152,6 +152,7 @@ def init_db():
             created_by TEXT
         )
     """)
+    conn.commit()  # Commit users table creation
     # Add new columns if they don't exist (for existing databases)
     for col, col_type, default in [
         ('email', 'TEXT', None),
@@ -198,6 +199,7 @@ def init_db():
             value JSONB NOT NULL
         )
     """)
+    conn.commit()  # Commit all table creations
 
     # Ensure default admin users exist
     cur.execute("DELETE FROM users WHERE username = %s", ("joey/alex",))
