@@ -46,6 +46,8 @@ import { fetchPublicProducts, fetchProductFilters } from "../api";
 import { theme } from "../theme";
 import ProductImageGallery from "./ProductImageGallery";
 import ProductDetailModal from "./ProductDetailModal";
+import PublicNavbar from "./PublicNavbar";
+import PublicFooter from "./PublicFooter";
 
 const DRAWER_WIDTH = 280;
 
@@ -414,8 +416,11 @@ const Catalog = () => {
 
   return (
     <ThemeProvider theme={theme}>
+      {/* Site-wide Navigation */}
+      <PublicNavbar />
+
       <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh", bgcolor: "#F5F7FA" }}>
-        {/* Header */}
+        {/* Catalog Header */}
         <AppBar position="sticky" sx={{ bgcolor: "white", boxShadow: 2 }}>
           <Toolbar sx={{ justifyContent: "space-between", minHeight: { xs: 64, md: 80 }, gap: 2 }}>
             {/* Left: Mobile menu + Logo + Home Link */}
@@ -1157,6 +1162,9 @@ const Catalog = () => {
           </Alert>
         </Snackbar>
       </Box>
+
+      {/* Site-wide Footer */}
+      <PublicFooter />
     </ThemeProvider>
   );
 };
