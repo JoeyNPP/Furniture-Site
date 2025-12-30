@@ -1,10 +1,14 @@
-﻿import React, { useContext, useMemo } from "react";
+import React, { useContext, useMemo } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Login from "./components/Login";
 import InternalProductList from "./components/InternalProductList";
 import CategoryPage from "./components/CategoryPage";
 import Catalog from "./components/Catalog";
 import AdminSettings from "./components/AdminSettings";
+import Home from "./components/Home";
+import About from "./components/About";
+import Services from "./components/Services";
+import Contact from "./components/Contact";
 import { Box, CssBaseline } from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { SettingsContext } from "./settings/SettingsContext";
@@ -36,8 +40,18 @@ function App() {
       <CssBaseline />
       <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          {/* Public Pages */}
+          <Route path="/" element={<Home />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/services" element={<Services />} />
+          <Route path="/contact" element={<Contact />} />
           <Route path="/catalog" element={<Catalog />} />
+          <Route path="/category/:category" element={<CategoryPage />} />
+
+          {/* Auth */}
+          <Route path="/login" element={<Login />} />
+
+          {/* Protected Admin Routes */}
           <Route
             path="/products"
             element={
@@ -54,8 +68,6 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/category/:category" element={<CategoryPage />} />
-          <Route path="/" element={<Navigate to="/login" replace />} />
         </Routes>
       </Box>
     </ThemeProvider>
